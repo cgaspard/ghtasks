@@ -27,10 +27,18 @@ body,
   margin: 0;
 }
 
+html,
 body {
+  background: transparent;
+}
+
+#app {
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
 button {
@@ -62,7 +70,7 @@ button:disabled {
   cursor: not-allowed;
 }
 
-input,
+input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
 textarea,
 select {
   appearance: none;
@@ -79,6 +87,13 @@ textarea:focus,
 select:focus {
   outline: none;
   border-color: var(--accent);
+}
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
 }
 
 a {

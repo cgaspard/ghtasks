@@ -48,7 +48,19 @@ enum TokenResponse {
         error: String,
         #[allow(dead_code)]
         error_description: Option<String>,
+        /// GitHub may include a new minimum interval (in seconds) when it
+        /// returns `slow_down`. Honor it — otherwise we deadlock at 5s.
+        #[serde(default)]
+        interval: Option<u64>,
     },
+}
+
+/// Outcome of a single device-flow poll.
+pub enum PollOutcome {
+    /// Auth complete — bearer token ready.
+    Token(String),
+    /// Not ready yet. Optional new minimum interval (secs) from GitHub.
+    Pending { new_interval: Option<u64> },
 }
 
 /// Start the device flow: ask GitHub for a user code.
@@ -58,7 +70,10 @@ pub async fn start_device_flow(client: &reqwest::Client) -> Result<DeviceCode> {
         .header("Accept", "application/json")
         .form(&[
             ("client_id", client_id()),
-            ("scope", "repo read:user notifications".to_string()),
+            (
+                "scope",
+                "repo read:user read:org notifications project".to_string(),
+            ),
         ])
         .send()
         .await?;
@@ -79,12 +94,12 @@ pub async fn start_device_flow(client: &reqwest::Client) -> Result<DeviceCode> {
     })
 }
 
-/// Poll once for the access token. Returns Ok(Some(token)) on success,
-/// Ok(None) if still pending, or Err on hard failure.
+/// Poll once for the access token. On a pending response, includes any new
+/// minimum polling interval GitHub has asked us to honor.
 pub async fn poll_for_token(
     client: &reqwest::Client,
     device_code: &str,
-) -> Result<Option<String>> {
+) -> Result<PollOutcome> {
     let resp = client
         .post("https://github.com/login/oauth/access_token")
         .header("Accept", "application/json")
@@ -99,12 +114,26 @@ pub async fn poll_for_token(
         .send()
         .await?;
 
-    let body: TokenResponse = resp.json().await?;
+    let status = resp.status();
+    let raw = resp.text().await.unwrap_or_default();
+    log::debug!("device-flow poll status={status} body={}", redact_token(&raw));
+
+    let body: TokenResponse = serde_json::from_str(&raw).map_err(|e| {
+        Error::Other(format!(
+            "device-flow: could not parse response (status {status}): {e}; body: {raw}"
+        ))
+    })?;
     match body {
-        TokenResponse::Ok { access_token, .. } => Ok(Some(access_token)),
-        TokenResponse::Err { error, .. } => match error.as_str() {
-            "authorization_pending" => Err(Error::AuthPending),
-            "slow_down" => Err(Error::AuthSlowDown),
+        TokenResponse::Ok { access_token, .. } => Ok(PollOutcome::Token(access_token)),
+        TokenResponse::Err {
+            error, interval, ..
+        } => match error.as_str() {
+            "authorization_pending" => Ok(PollOutcome::Pending {
+                new_interval: interval,
+            }),
+            "slow_down" => Ok(PollOutcome::Pending {
+                new_interval: interval,
+            }),
             "expired_token" => Err(Error::AuthExpired),
             "access_denied" => Err(Error::AuthDenied),
             other => Err(Error::Other(format!("oauth error: {other}"))),
@@ -115,8 +144,16 @@ pub async fn poll_for_token(
 /// Persist the token in the OS keychain.
 pub fn store_token(token: &str) -> Result<()> {
     let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)?;
-    entry.set_password(token)?;
-    Ok(())
+    match entry.set_password(token) {
+        Ok(()) => {
+            log::info!("stored github token in keychain ({} bytes)", token.len());
+            Ok(())
+        }
+        Err(e) => {
+            log::error!("failed to store token in keychain: {e}");
+            Err(Error::Keyring(e))
+        }
+    }
 }
 
 /// Retrieve the token from the OS keychain if present.
@@ -127,6 +164,30 @@ pub fn load_token() -> Result<Option<String>> {
         Err(keyring::Error::NoEntry) => Ok(None),
         Err(e) => Err(Error::Keyring(e)),
     }
+}
+
+/// Redact any `access_token` value from a raw JSON response so tokens don't
+/// leak into logs or error messages.
+fn redact_token(raw: &str) -> String {
+    // Simple string-level mask — good enough for logging.
+    let mut out = String::with_capacity(raw.len());
+    let mut rest = raw;
+    while let Some(idx) = rest.find("\"access_token\":") {
+        out.push_str(&rest[..idx]);
+        out.push_str("\"access_token\":\"<redacted>\"");
+        rest = &rest[idx + "\"access_token\":".len()..];
+        // Skip the original value: optional whitespace, then a quoted string.
+        let after_ws = rest.trim_start();
+        if let Some(stripped) = after_ws.strip_prefix('"') {
+            if let Some(end) = stripped.find('"') {
+                rest = &stripped[end + 1..];
+                continue;
+            }
+        }
+        break;
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Remove the stored token (logout).

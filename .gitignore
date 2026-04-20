@@ -12,8 +12,17 @@ src-tauri/gen
 Thumbs.db
 
 # Editor
-.vscode
 .idea
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Secrets / local env
+.env
+.env.local
+.env.*.local
 
 # Logs
 *.log

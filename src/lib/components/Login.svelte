@@ -11,42 +11,61 @@
   let device: DeviceCode | null = $state(null);
   let polling = $state(false);
   let status = $state<string>("");
-  let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let pollTimer: ReturnType<typeof setTimeout> | null = null;
 
   async function start() {
     $lastError = null;
     status = "";
     try {
+      await api.setAutoHide(false);
       device = await api.authStart();
       await openUrl(device.verification_uri);
       beginPolling(device);
     } catch (e) {
       $lastError = String(e);
+      await api.setAutoHide(true);
     }
   }
 
   function beginPolling(d: DeviceCode) {
     polling = true;
-    const intervalMs = Math.max(5, d.interval) * 1000;
-    pollTimer = setInterval(async () => {
-      try {
-        const done = await api.authPoll(d.device_code);
-        if (done) {
-          stopPolling();
-          status = "Signed in.";
-          await onAuthed();
-        }
-      } catch (e) {
+    // GitHub sends an initial `interval` (usually 5s). Honor it, and reschedule
+    // on every `slow_down` response (which includes a new interval in secs).
+    schedulePoll(d, d.interval);
+  }
+
+  function schedulePoll(d: DeviceCode, seconds: number) {
+    if (pollTimer) clearTimeout(pollTimer);
+    // Add a small jitter buffer so we never undercut the server's minimum.
+    const ms = Math.max(1, seconds) * 1000 + 250;
+    pollTimer = setTimeout(() => runPoll(d), ms);
+  }
+
+  async function runPoll(d: DeviceCode) {
+    if (!polling) return;
+    try {
+      const res = await api.authPoll(d.device_code);
+      if (res.done) {
         stopPolling();
-        $lastError = String(e);
+        status = "Signed in.";
+        await api.setAutoHide(true);
+        await onAuthed();
+        return;
       }
-    }, intervalMs);
+      // Reschedule with GitHub's updated interval if provided, else keep current.
+      const next = res.new_interval ?? d.interval;
+      schedulePoll(d, next);
+    } catch (e) {
+      stopPolling();
+      await api.setAutoHide(true);
+      $lastError = String(e);
+    }
   }
 
   function stopPolling() {
     polling = false;
     if (pollTimer) {
-      clearInterval(pollTimer);
+      clearTimeout(pollTimer);
       pollTimer = null;
     }
   }
@@ -63,13 +82,14 @@
   }
 </script>
 
-<div class="login">
+<div class="login" data-tauri-drag-region>
   <div class="icon">✓</div>
   <h1>GH Tasks</h1>
   <p class="muted">Sign in with GitHub to get started.</p>
 
   {#if !device}
     <button class="primary" onclick={start}>Sign in with GitHub</button>
+    <button class="ghost quit" onclick={() => api.quit()}>Quit</button>
   {:else}
     <p class="muted small">
       Enter this code on the GitHub page that just opened:
@@ -131,5 +151,10 @@
   .status {
     color: var(--ok);
     font-size: 12px;
+  }
+  .quit {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-dim);
   }
 </style>

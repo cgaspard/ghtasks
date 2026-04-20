@@ -22,12 +22,6 @@ pub enum Error {
     #[error("serde error: {0}")]
     Serde(#[from] serde_json::Error),
 
-    #[error("auth pending")]
-    AuthPending,
-
-    #[error("auth slow down")]
-    AuthSlowDown,
-
     #[error("auth expired, restart device flow")]
     AuthExpired,
 

@@ -6,9 +6,13 @@
     sources,
     visibleIssues,
     selectedSourceIds,
+    showNewIssue,
   } from "../stores";
 
   let filter = $state("");
+  /** node_id of the issue pending close-confirm (null = none). */
+  let confirmingId: string | null = $state(null);
+  let closing = $state(false);
 
   const filtered = $derived(
     $visibleIssues.filter(({ issue }) =>
@@ -19,6 +23,15 @@
             l.name.toLowerCase().includes(filter.toLowerCase()),
           ),
     ),
+  );
+
+  const sourceErrors = $derived(
+    $sourceResults
+      .filter((r) => r.error)
+      .map((r) => {
+        const name = $sources.find((s) => s.id === r.source_id)?.name ?? r.source_id;
+        return { name, error: r.error as string };
+      }),
   );
 
   function toggleSource(id: string) {
@@ -36,9 +49,17 @@
     await openUrl(issue.html_url);
   }
 
-  async function complete(issue: Issue) {
+  function askClose(issue: Issue) {
+    confirmingId = confirmingId === issue.node_id ? null : issue.node_id;
+  }
+  function cancelClose() {
+    confirmingId = null;
+  }
+
+  async function confirmClose(issue: Issue) {
     const repo = repoFullName(issue);
     if (!repo) return;
+    closing = true;
     try {
       await api.toggleIssueState(repo, issue.number, true);
       // Optimistic remove from the local list.
@@ -46,8 +67,11 @@
         ...r,
         issues: r.issues.filter((i) => i.node_id !== issue.node_id),
       }));
+      confirmingId = null;
     } catch {
       // leave as-is; next refresh will reconcile.
+    } finally {
+      closing = false;
     }
   }
 
@@ -71,6 +95,9 @@
       bind:value={filter}
       aria-label="Filter issues"
     />
+    <button class="primary small" onclick={() => ($showNewIssue = true)}
+      >+ New</button
+    >
   </div>
 
   {#if $sources.length > 0}
@@ -80,7 +107,7 @@
         class:active={$selectedSourceIds.size === 0}
         onclick={clearSelection}>All</button
       >
-      {#each $sources.filter((s) => s.enabled) as s (s.id)}
+      {#each $sources.filter((s) => s.enabled && s.kind === "repo") as s (s.id)}
         <button
           class="chip"
           class:active={$selectedSourceIds.has(s.id)}
@@ -97,41 +124,75 @@
     </div>
   {/if}
 
+  {#if sourceErrors.length > 0}
+    <div class="src-errors">
+      {#each sourceErrors as e}
+        <div class="src-error"><strong>{e.name}:</strong> {e.error}</div>
+      {/each}
+    </div>
+  {/if}
+
   {#if filtered.length === 0}
     <div class="empty">
       {#if $sources.length === 0}
         No sources yet. Add one in the <strong>Sources</strong> tab.
+      {:else if sourceErrors.length > 0}
+        All sources errored. Check the messages above.
       {:else}
-        No issues match.
+        No issues match this query.
       {/if}
     </div>
   {:else}
     <ul class="issues">
       {#each filtered as { issue, sourceId } (issue.node_id)}
         {@const src = $sources.find((s) => s.id === sourceId)}
-        <li class="issue">
-          <button
-            class="check"
-            title="Close issue"
-            onclick={() => complete(issue)}>○</button
-          >
-          <div class="main">
-            <button class="title" onclick={() => open(issue)}>
-              {issue.title}
-            </button>
-            <div class="meta">
-              <span class="repo">{repoFullName(issue) || src?.repo || ""}</span>
-              <span class="num">#{issue.number}</span>
-              <span class="time">· {relTime(issue.updated_at)}</span>
-              {#each issue.labels.slice(0, 3) as l}
-                <span
-                  class="label"
-                  style="background:#{l.color}22;border-color:#{l.color};color:#{l.color}"
-                  >{l.name}</span
+        <li class="issue" class:confirming={confirmingId === issue.node_id}>
+          {#if confirmingId === issue.node_id}
+            <div class="confirm">
+              <div class="confirm-prompt">Close this issue?</div>
+              <div class="confirm-sub">
+                #{issue.number} · {issue.title}
+              </div>
+              <div class="confirm-actions">
+                <button class="ghost small" onclick={cancelClose} disabled={closing}
+                  >No</button
                 >
-              {/each}
+                <button
+                  class="danger primary small"
+                  onclick={() => confirmClose(issue)}
+                  disabled={closing}
+                >
+                  {closing ? "Closing…" : "Yes, close"}
+                </button>
+              </div>
             </div>
-          </div>
+          {:else}
+            <button
+              class="check"
+              title="Close issue"
+              onclick={() => askClose(issue)}>○</button
+            >
+            <div class="main">
+              <button class="title" onclick={() => open(issue)}>
+                {issue.title}
+              </button>
+              <div class="meta">
+                <span class="repo"
+                  >{repoFullName(issue) ||
+                    (src && src.kind === "repo" ? src.repo : "")}</span
+                >
+                <span class="num">#{issue.number}</span>
+                <span class="time">· {relTime(issue.updated_at)}</span>
+                {#each issue.labels.slice(0, 3) as l}
+                  <span
+                    class="label"
+                    style="background:#{l.color}22;border-color:#{l.color};color:#{l.color}"
+                    >{l.name}</span
+                  >
+                {/each}
+              </div>
+            </div>
+          {/if}
         </li>
       {/each}
     </ul>
@@ -143,10 +204,23 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
   }
   .filters {
+    display: flex;
+    gap: 6px;
+    align-items: center;
     padding: 8px 10px;
     border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    flex: 0 0 auto;
+  }
+  .filters input {
+    flex: 1;
+  }
+  .small {
+    font-size: 11px;
+    padding: 4px 8px;
   }
   .chips {
     display: flex;
@@ -154,6 +228,8 @@
     gap: 4px;
     padding: 8px 10px;
     border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    flex: 0 0 auto;
   }
   .chip {
     --chip: var(--accent);
@@ -188,6 +264,9 @@
     list-style: none;
     margin: 0;
     padding: 0;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
   }
   .issue {
     display: flex;
@@ -197,6 +276,40 @@
   }
   .issue:hover {
     background: var(--bg-elev);
+  }
+  .issue.confirming {
+    background: rgba(229, 72, 77, 0.08);
+  }
+  .confirm {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .confirm-prompt {
+    font-weight: 500;
+    color: var(--text);
+  }
+  .confirm-sub {
+    font-size: 11px;
+    color: var(--text-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .confirm-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+  .danger.primary {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: white;
+  }
+  .small {
+    font-size: 11px;
+    padding: 4px 10px;
   }
   .check {
     width: 22px;
@@ -240,5 +353,15 @@
     border-radius: 999px;
     font-size: 10px;
     border: 1px solid;
+  }
+  .src-errors {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(229, 72, 77, 0.08);
+  }
+  .src-error {
+    font-size: 11px;
+    color: #ffb4b7;
+    line-height: 1.4;
   }
 </style>

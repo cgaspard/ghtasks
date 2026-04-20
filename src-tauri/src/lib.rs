@@ -3,15 +3,39 @@ mod commands;
 mod error;
 mod github;
 mod notify;
+mod projects;
 mod sources;
 mod tray;
 
 use commands::AppState;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use tauri::Manager;
+
+/// Whether the window should auto-hide when focus is lost. Toggled from the
+/// frontend during the OAuth device flow so the browser hand-off doesn't
+/// close the popover mid-authentication.
+pub type AutoHideOnBlur = Arc<AtomicBool>;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    env_logger::init();
+    // Default to info for everything and debug for our own crate, unless
+    // RUST_LOG is set explicitly.
+    env_logger::Builder::from_env(
+        env_logger::Env::default().default_filter_or("info,ghtasks_lib=debug"),
+    )
+    .init();
+
+    log::info!(
+        "ghtasks starting; client_id_source={}",
+        if std::env::var("GHTASKS_CLIENT_ID").is_ok() {
+            "runtime-env"
+        } else if option_env!("GHTASKS_CLIENT_ID").is_some() {
+            "build-env"
+        } else {
+            "placeholder (will fail)"
+        }
+    );
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -21,6 +45,7 @@ pub fn run() {
         .manage(AppState {
             http: github::http_client(),
         })
+        .manage::<AutoHideOnBlur>(Arc::new(AtomicBool::new(true)))
         .setup(|app| {
             // Build the tray. On desktop only — mobile has no tray.
             #[cfg(desktop)]
@@ -33,11 +58,21 @@ pub fn run() {
             }
 
             // Hide on blur so the popover behaves like a menu-bar panel.
+            // Disabled during the OAuth device flow — the browser steals focus
+            // and would hide the window before the user can see the user code.
+            // Toggled via the `auto_hide_on_blur` Mutex below.
             if let Some(win) = app.get_webview_window("main") {
+                // Apply the user's preferred size preset before the first show.
+                #[cfg(desktop)]
+                tray::apply_saved_size(&app.handle(), &win);
+
                 let win_clone = win.clone();
+                let auto_hide = app.state::<AutoHideOnBlur>().inner().clone();
                 win.on_window_event(move |event| {
                     if let tauri::WindowEvent::Focused(false) = event {
-                        let _ = win_clone.hide();
+                        if auto_hide.load(std::sync::atomic::Ordering::Relaxed) {
+                            let _ = win_clone.hide();
+                        }
                     }
                 });
             }
@@ -50,6 +85,7 @@ pub fn run() {
             commands::auth_poll,
             commands::auth_logout,
             commands::list_repos,
+            commands::list_repo_labels,
             commands::list_sources,
             commands::save_source,
             commands::delete_source,
@@ -60,6 +96,13 @@ pub fn run() {
             commands::save_settings,
             commands::show_window,
             commands::hide_window,
+            commands::quit_app,
+            commands::set_auto_hide,
+            commands::list_projects,
+            commands::fetch_all_projects,
+            commands::set_project_item_status,
+            commands::add_issue_comment,
+            commands::create_issue_in_project,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

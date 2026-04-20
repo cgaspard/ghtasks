@@ -129,6 +129,40 @@ struct SearchResponse<T> {
     items: Vec<T>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RepoLabel {
+    pub name: String,
+    #[serde(default)]
+    pub color: String,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+/// List every label defined on a repo (paginated; 100 at a time, up to 500).
+pub async fn list_repo_labels(
+    client: &reqwest::Client,
+    token: &str,
+    repo_full_name: &str,
+) -> Result<Vec<RepoLabel>> {
+    let mut out: Vec<RepoLabel> = Vec::new();
+    for page in 1..=5u32 {
+        let resp = client
+            .get(format!(
+                "{API_BASE}/repos/{repo_full_name}/labels?per_page=100&page={page}"
+            ))
+            .headers(auth_headers(token))
+            .send()
+            .await?;
+        let batch: Vec<RepoLabel> = json(resp).await?;
+        let got = batch.len();
+        out.extend(batch);
+        if got < 100 {
+            break;
+        }
+    }
+    Ok(out)
+}
+
 /// Run a GitHub search-issues query. `query` is a raw GitHub search string.
 pub async fn search_issues(
     client: &reqwest::Client,

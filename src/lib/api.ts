@@ -21,6 +21,11 @@ export interface DeviceCode {
   interval: number;
 }
 
+export interface AuthPollResult {
+  done: boolean;
+  new_interval: number | null;
+}
+
 export interface Repo {
   id: number;
   name: string;
@@ -35,6 +40,12 @@ export interface Repo {
 export interface IssueLabel {
   name: string;
   color: string;
+}
+
+export interface RepoLabel {
+  name: string;
+  color: string;
+  description: string | null;
 }
 
 export interface IssueUser {
@@ -60,14 +71,72 @@ export interface Issue {
   pull_request: unknown | null;
 }
 
-export interface Source {
+export type SourceKind =
+  | { kind: "repo"; repo: string; query: string }
+  | {
+      kind: "project";
+      project_id: string;
+      owner_login: string;
+      number: number;
+      title: string;
+    };
+
+export type Source = {
   id: string;
   name: string;
-  repo: string;
-  query: string;
   enabled: boolean;
   color: string | null;
   notify: boolean;
+} & SourceKind;
+
+export interface ProjectSummary {
+  id: string;
+  number: number;
+  title: string;
+  owner_login: string;
+  owner_type: "user" | "organization" | "unknown";
+  url: string;
+  closed: boolean;
+}
+
+export interface ProjectFieldOption {
+  id: string;
+  name: string;
+  color: string | null;
+}
+
+export interface ProjectField {
+  id: string;
+  name: string;
+  data_type: string;
+  options: ProjectFieldOption[];
+}
+
+export interface ProjectItemFieldValue {
+  field_id: string;
+  field_name: string;
+  data_type: string;
+  option_id?: string;
+  text: string | null;
+}
+
+export interface ProjectItem {
+  item_id: string;
+  issue: Issue;
+  repo: string;
+  field_values: ProjectItemFieldValue[];
+}
+
+export interface ProjectSnapshot {
+  project: ProjectSummary;
+  fields: ProjectField[];
+  items: ProjectItem[];
+}
+
+export interface ProjectFetchResult {
+  source_id: string;
+  snapshot: ProjectSnapshot | null;
+  error: string | null;
 }
 
 export interface SourceResult {
@@ -88,15 +157,18 @@ export interface Settings {
   default_repo: string | null;
   poll_interval_secs: number;
   launch_at_login: boolean;
+  window_size: "compact" | "default" | "tall" | "wide" | "large";
 }
 
 export const api = {
   authStatus: () => invoke<AuthStatus>("auth_status"),
   authStart: () => invoke<DeviceCode>("auth_start"),
   authPoll: (device_code: string) =>
-    invoke<boolean>("auth_poll", { deviceCode: device_code }),
+    invoke<AuthPollResult>("auth_poll", { deviceCode: device_code }),
   authLogout: () => invoke<void>("auth_logout"),
   listRepos: () => invoke<Repo[]>("list_repos"),
+  listRepoLabels: (repo: string) =>
+    invoke<RepoLabel[]>("list_repo_labels", { repo }),
   listSources: () => invoke<Source[]>("list_sources"),
   saveSource: (source: Source) => invoke<Source>("save_source", { source }),
   deleteSource: (id: string) => invoke<void>("delete_source", { id }),
@@ -110,6 +182,36 @@ export const api = {
     invoke<void>("save_settings", { settings }),
   showWindow: () => invoke<void>("show_window"),
   hideWindow: () => invoke<void>("hide_window"),
+  quit: () => invoke<void>("quit_app"),
+  setAutoHide: (enabled: boolean) =>
+    invoke<void>("set_auto_hide", { enabled }),
+  listProjects: () => invoke<ProjectSummary[]>("list_projects"),
+  fetchAllProjects: () =>
+    invoke<ProjectFetchResult[]>("fetch_all_projects"),
+  setProjectItemStatus: (
+    project_id: string,
+    item_id: string,
+    field_id: string,
+    option_id: string | null,
+  ) =>
+    invoke<void>("set_project_item_status", {
+      projectId: project_id,
+      itemId: item_id,
+      fieldId: field_id,
+      optionId: option_id,
+    }),
+  addIssueComment: (repo: string, number: number, body: string) =>
+    invoke<void>("add_issue_comment", { repo, number, body }),
+  createIssueInProject: (
+    repo: string,
+    project_id: string,
+    input: NewIssueInput,
+  ) =>
+    invoke<Issue>("create_issue_in_project", {
+      repo,
+      projectId: project_id,
+      input,
+    }),
 };
 
 export function repoFullName(issue: Issue): string {

@@ -1,7 +1,8 @@
 use crate::auth;
 use crate::error::{Error, Result};
-use crate::github::{self, Issue, NewIssueInput, Repo, User};
+use crate::github::{self, Issue, NewIssueInput, Repo, RepoLabel, User};
 use crate::notify;
+use crate::projects::{self, ProjectSnapshot, ProjectSummary};
 use crate::sources::{self, Settings, Source};
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
@@ -52,19 +53,31 @@ pub async fn auth_start(state: State<'_, AppState>) -> Result<auth::DeviceCode> 
     auth::start_device_flow(&state.http).await
 }
 
+#[derive(Debug, Serialize)]
+pub struct AuthPollResult {
+    pub done: bool,
+    /// If GitHub asked us to slow down, the new minimum interval in seconds.
+    /// Frontend should reschedule its polling timer to this.
+    pub new_interval: Option<u64>,
+}
+
 #[tauri::command]
 pub async fn auth_poll(
     state: State<'_, AppState>,
     device_code: String,
-) -> Result<bool> {
-    match auth::poll_for_token(&state.http, &device_code).await {
-        Ok(Some(token)) => {
+) -> Result<AuthPollResult> {
+    match auth::poll_for_token(&state.http, &device_code).await? {
+        auth::PollOutcome::Token(token) => {
             auth::store_token(&token)?;
-            Ok(true)
+            Ok(AuthPollResult {
+                done: true,
+                new_interval: None,
+            })
         }
-        Ok(None) => Ok(false),
-        Err(Error::AuthPending) | Err(Error::AuthSlowDown) => Ok(false),
-        Err(e) => Err(e),
+        auth::PollOutcome::Pending { new_interval } => Ok(AuthPollResult {
+            done: false,
+            new_interval,
+        }),
     }
 }
 
@@ -80,8 +93,28 @@ pub async fn list_repos(state: State<'_, AppState>) -> Result<Vec<Repo>> {
 }
 
 #[tauri::command]
+pub async fn list_repo_labels(
+    state: State<'_, AppState>,
+    repo: String,
+) -> Result<Vec<RepoLabel>> {
+    let token = require_token().await?;
+    github::list_repo_labels(&state.http, &token, &repo).await
+}
+
+#[tauri::command]
 pub async fn list_sources(app: AppHandle) -> Result<Vec<Source>> {
-    sources::list_sources(&app)
+    let s = sources::list_sources(&app)?;
+    log::debug!(
+        "list_sources: {} entries ({} project, {} repo)",
+        s.len(),
+        s.iter()
+            .filter(|x| matches!(x.kind, sources::SourceKind::Project { .. }))
+            .count(),
+        s.iter()
+            .filter(|x| matches!(x.kind, sources::SourceKind::Repo { .. }))
+            .count(),
+    );
+    Ok(s)
 }
 
 #[tauri::command]
@@ -89,6 +122,20 @@ pub async fn save_source(app: AppHandle, mut source: Source) -> Result<Source> {
     if source.id.is_empty() {
         source.id = Uuid::new_v4().to_string();
     }
+    log::info!(
+        "save_source: id={} name={} enabled={} kind={}",
+        source.id,
+        source.name,
+        source.enabled,
+        match &source.kind {
+            sources::SourceKind::Repo { repo, query } => {
+                format!("repo({repo} query={query:?})")
+            }
+            sources::SourceKind::Project {
+                project_id, number, ..
+            } => format!("project(#{number} id={project_id})"),
+        }
+    );
     sources::upsert_source(&app, source)
 }
 
@@ -112,12 +159,29 @@ pub async fn fetch_all(
 ) -> Result<Vec<SourceResult>> {
     let token = require_token().await?;
     let sources = sources::list_sources(&app)?;
+    let enabled_count = sources.iter().filter(|s| s.enabled).count();
+    log::info!(
+        "fetch_all: invoked; total_sources={} enabled_sources={}",
+        sources.len(),
+        enabled_count
+    );
     let mut results: Vec<SourceResult> = Vec::new();
 
     for src in sources.iter().filter(|s| s.enabled) {
-        let q = src.full_query();
+        let (repo, q) = match &src.kind {
+            sources::SourceKind::Repo { repo, .. } => {
+                (repo.clone(), src.full_query().unwrap_or_default())
+            }
+            sources::SourceKind::Project { .. } => continue,
+        };
+        log::debug!("fetch_all: source={} query={q}", src.name);
         match github::search_issues(&state.http, &token, &q).await {
             Ok(issues) => {
+                log::debug!(
+                    "fetch_all: source={} returned {} issue(s)",
+                    src.name,
+                    issues.len()
+                );
                 // Notify on any new issues not yet seen.
                 if src.notify {
                     let seen = sources::load_seen(&app, &src.id).unwrap_or_default();
@@ -135,7 +199,7 @@ pub async fn fetch_all(
                             let _ = notify::send(
                                 &app,
                                 &format!("{}: {}", src.name, issue.title),
-                                &format!("#{} in {}", issue.number, src.repo),
+                                &format!("#{} in {}", issue.number, repo),
                             );
                         }
                     }
@@ -148,11 +212,14 @@ pub async fn fetch_all(
                     error: None,
                 });
             }
-            Err(e) => results.push(SourceResult {
-                source_id: src.id.clone(),
-                issues: vec![],
-                error: Some(e.to_string()),
-            }),
+            Err(e) => {
+                log::error!("fetch_all: source={} error={e}", src.name);
+                results.push(SourceResult {
+                    source_id: src.id.clone(),
+                    issues: vec![],
+                    error: Some(e.to_string()),
+                });
+            }
         }
     }
 
@@ -188,11 +255,20 @@ pub async fn get_settings(app: AppHandle) -> Result<Settings> {
 
 #[tauri::command]
 pub async fn save_settings(app: AppHandle, settings: Settings) -> Result<()> {
-    sources::save_settings(&app, &settings)
+    sources::save_settings(&app, &settings)?;
+    // Apply any visual settings that need an immediate side effect.
+    #[cfg(desktop)]
+    if let Some(win) = app.get_webview_window("main") {
+        crate::tray::apply_saved_size(&app, &win);
+    }
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn show_window(app: AppHandle) -> Result<()> {
+    #[cfg(desktop)]
+    crate::tray::show_at_tray(&app);
+    #[cfg(not(desktop))]
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.show();
         let _ = win.set_focus();
@@ -206,4 +282,165 @@ pub async fn hide_window(app: AppHandle) -> Result<()> {
         let _ = win.hide();
     }
     Ok(())
+}
+
+#[tauri::command]
+pub async fn quit_app(app: AppHandle) -> Result<()> {
+    app.exit(0);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn set_auto_hide(
+    enabled: bool,
+    flag: State<'_, crate::AutoHideOnBlur>,
+) -> Result<()> {
+    flag.store(enabled, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
+}
+
+// ------------------------- Projects v2 -------------------------------
+
+#[tauri::command]
+pub async fn list_projects(state: State<'_, AppState>) -> Result<Vec<ProjectSummary>> {
+    let token = require_token().await?;
+    projects::list_projects(&state.http, &token).await
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProjectFetchResult {
+    pub source_id: String,
+    pub snapshot: Option<ProjectSnapshot>,
+    pub error: Option<String>,
+}
+
+/// Fetch all enabled Project sources. Each returns a full snapshot
+/// (project metadata + fields + items) or an error. Project fetches run
+/// concurrently; within one project, fields + items are also concurrent.
+#[tauri::command]
+pub async fn fetch_all_projects(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Vec<ProjectFetchResult>> {
+    let overall_start = std::time::Instant::now();
+    let token = require_token().await?;
+    let all_sources = sources::list_sources(&app)?;
+    let project_sources: Vec<Source> = all_sources
+        .into_iter()
+        .filter(|s| s.enabled && matches!(s.kind, sources::SourceKind::Project { .. }))
+        .collect();
+    log::info!(
+        "fetch_all_projects: invoked; project_sources={}",
+        project_sources.len()
+    );
+
+    // Spawn concurrent fetches. Ordered results using a Vec<JoinHandle>.
+    let mut handles = Vec::with_capacity(project_sources.len());
+    for src in project_sources {
+        let project_id = match &src.kind {
+            sources::SourceKind::Project { project_id, .. } => project_id.clone(),
+            _ => continue,
+        };
+        let http = state.http.clone();
+        let token = token.clone();
+        let src_id = src.id.clone();
+        let src_name = src.name.clone();
+        handles.push(tokio::spawn(async move {
+            let t0 = std::time::Instant::now();
+            log::debug!(
+                "fetch_all_projects: starting source={} project_id={}",
+                src_name,
+                project_id
+            );
+            let res = projects::fetch_project_snapshot(&http, &token, &project_id).await;
+            let ms = t0.elapsed().as_millis();
+            match &res {
+                Ok(snap) => log::info!(
+                    "fetch_all_projects: source={} items={} fields={} took={}ms",
+                    src_name,
+                    snap.items.len(),
+                    snap.fields.len(),
+                    ms
+                ),
+                Err(e) => log::error!(
+                    "fetch_all_projects: source={} error={e} took={}ms",
+                    src_name,
+                    ms
+                ),
+            }
+            (src_id, res)
+        }));
+    }
+
+    let mut out: Vec<ProjectFetchResult> = Vec::with_capacity(handles.len());
+    for h in handles {
+        match h.await {
+            Ok((source_id, Ok(snap))) => out.push(ProjectFetchResult {
+                source_id,
+                snapshot: Some(snap),
+                error: None,
+            }),
+            Ok((source_id, Err(e))) => out.push(ProjectFetchResult {
+                source_id,
+                snapshot: None,
+                error: Some(e.to_string()),
+            }),
+            Err(join_err) => {
+                log::error!("fetch_all_projects: join error {join_err}");
+            }
+        }
+    }
+    log::info!(
+        "fetch_all_projects: complete; total={}ms results={}",
+        overall_start.elapsed().as_millis(),
+        out.len()
+    );
+    Ok(out)
+}
+
+#[tauri::command]
+pub async fn set_project_item_status(
+    state: State<'_, AppState>,
+    project_id: String,
+    item_id: String,
+    field_id: String,
+    option_id: Option<String>,
+) -> Result<()> {
+    let token = require_token().await?;
+    projects::set_single_select_field(
+        &state.http,
+        &token,
+        &project_id,
+        &item_id,
+        &field_id,
+        option_id.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn add_issue_comment(
+    state: State<'_, AppState>,
+    repo: String,
+    number: u64,
+    body: String,
+) -> Result<()> {
+    let token = require_token().await?;
+    projects::add_issue_comment(&state.http, &token, &repo, number, &body).await
+}
+
+/// Create an issue and attach it to a ProjectV2 in one shot. Returns the
+/// created Issue (REST shape) so the caller can link / navigate.
+#[tauri::command]
+pub async fn create_issue_in_project(
+    state: State<'_, AppState>,
+    repo: String,
+    project_id: String,
+    input: NewIssueInput,
+) -> Result<Issue> {
+    let token = require_token().await?;
+    let issue = github::create_issue(&state.http, &token, &repo, &input).await?;
+    let _item_id =
+        projects::add_item_to_project(&state.http, &token, &project_id, &issue.node_id).await?;
+    Ok(issue)
 }

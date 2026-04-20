@@ -18,23 +18,18 @@
         "height": 560,
         "minWidth": 340,
         "minHeight": 420,
-        "resizable": true,
-        "decorations": true,
-        "transparent": false,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": true,
         "skipTaskbar": true,
         "visible": false,
-        "alwaysOnTop": false,
-        "center": true
+        "alwaysOnTop": true,
+        "center": false
       }
     ],
     "security": {
       "csp": "default-src 'self'; img-src 'self' data: https://avatars.githubusercontent.com https://github.com; connect-src 'self' https://api.github.com https://github.com; style-src 'self' 'unsafe-inline'; script-src 'self'"
-    },
-    "trayIcon": {
-      "id": "main-tray",
-      "iconPath": "icons/tray.png",
-      "iconAsTemplate": true,
-      "menuOnLeftClick": false
     }
   },
   "bundle": {
