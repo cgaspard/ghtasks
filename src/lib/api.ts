@@ -212,6 +212,7 @@ export const api = {
       projectId: project_id,
       input,
     }),
+  autostartStatus: () => invoke<boolean>("autostart_status"),
 };
 
 export function repoFullName(issue: Issue): string {

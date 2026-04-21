@@ -258,10 +258,45 @@ pub async fn save_settings(app: AppHandle, settings: Settings) -> Result<()> {
     sources::save_settings(&app, &settings)?;
     // Apply any visual settings that need an immediate side effect.
     #[cfg(desktop)]
-    if let Some(win) = app.get_webview_window("main") {
-        crate::tray::apply_saved_size(&app, &win);
+    {
+        if let Some(win) = app.get_webview_window("main") {
+            crate::tray::apply_saved_size(&app, &win);
+        }
+        // Launch-at-login: sync the autostart plugin with the saved flag.
+        apply_autostart(&app, settings.launch_at_login);
     }
     Ok(())
+}
+
+/// Enable or disable autostart to match the saved setting.
+#[cfg(desktop)]
+fn apply_autostart(app: &AppHandle, enabled: bool) {
+    use tauri_plugin_autostart::ManagerExt;
+    let mgr = app.autolaunch();
+    let currently = mgr.is_enabled().unwrap_or(false);
+    if enabled && !currently {
+        if let Err(e) = mgr.enable() {
+            log::warn!("autostart enable failed: {e}");
+        }
+    } else if !enabled && currently {
+        if let Err(e) = mgr.disable() {
+            log::warn!("autostart disable failed: {e}");
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn autostart_status(app: AppHandle) -> Result<bool> {
+    #[cfg(desktop)]
+    {
+        use tauri_plugin_autostart::ManagerExt;
+        Ok(app.autolaunch().is_enabled().unwrap_or(false))
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = app;
+        Ok(false)
+    }
 }
 
 #[tauri::command]

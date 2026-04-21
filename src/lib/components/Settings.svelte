@@ -21,6 +21,16 @@
   onMount(async () => {
     try {
       settings = await api.getSettings();
+      // Trust the OS state over the stored flag on load — they should match,
+      // but autostart may have been disabled out-of-band.
+      try {
+        const real = await api.autostartStatus();
+        if (real !== settings.launch_at_login) {
+          settings.launch_at_login = real;
+        }
+      } catch {
+        // non-fatal
+      }
       repos = await api.listRepos();
     } catch (e) {
       $lastError = String(e);
@@ -103,7 +113,6 @@
             onchange={save}
           />
           Launch at login
-          <span class="muted small">(coming soon)</span>
         </label>
 
         {#if saved}

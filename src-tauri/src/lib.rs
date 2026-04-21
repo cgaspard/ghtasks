@@ -42,6 +42,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .manage(AppState {
             http: github::http_client(),
         })
@@ -61,6 +65,21 @@ pub fn run() {
             // Disabled during the OAuth device flow — the browser steals focus
             // and would hide the window before the user can see the user code.
             // Toggled via the `auto_hide_on_blur` Mutex below.
+            // Sync autostart to the saved setting (no-op if already matching).
+            #[cfg(desktop)]
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                if let Ok(s) = sources::load_settings(&app.handle()) {
+                    let mgr = app.autolaunch();
+                    let currently = mgr.is_enabled().unwrap_or(false);
+                    if s.launch_at_login && !currently {
+                        let _ = mgr.enable();
+                    } else if !s.launch_at_login && currently {
+                        let _ = mgr.disable();
+                    }
+                }
+            }
+
             if let Some(win) = app.get_webview_window("main") {
                 // Apply the user's preferred size preset before the first show.
                 #[cfg(desktop)]
@@ -103,6 +122,7 @@ pub fn run() {
             commands::set_project_item_status,
             commands::add_issue_comment,
             commands::create_issue_in_project,
+            commands::autostart_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

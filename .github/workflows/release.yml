@@ -62,20 +62,31 @@ jobs:
       - name: Install npm deps
         run: npm ci
 
+      # Export Apple signing env vars ONLY if the certificate secret is
+      # present. An empty APPLE_CERTIFICATE tells tauri-action to try
+      # signing with an empty cert, which breaks the macOS build.
+      - name: Configure Apple signing env
+        if: matrix.platform == 'macos-latest' && secrets.APPLE_CERTIFICATE != ''
+        run: |
+          {
+            echo "APPLE_CERTIFICATE=${{ secrets.APPLE_CERTIFICATE }}"
+            echo "APPLE_CERTIFICATE_PASSWORD=${{ secrets.APPLE_CERTIFICATE_PASSWORD }}"
+            echo "APPLE_SIGNING_IDENTITY=${{ secrets.APPLE_SIGNING_IDENTITY }}"
+            echo "APPLE_ID=${{ secrets.APPLE_ID }}"
+            echo "APPLE_PASSWORD=${{ secrets.APPLE_PASSWORD }}"
+            echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}"
+          } >> "$GITHUB_ENV"
+
       - name: Build and release with tauri-action
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Embedded into the binary at compile time (via option_env!).
           GHTASKS_CLIENT_ID: ${{ secrets.GHTASKS_CLIENT_ID }}
-          # macOS signing + notarization — populated only if all cert secrets
-          # are present. tauri-action reads these automatically.
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Apple signing/notarization vars (APPLE_CERTIFICATE etc.) are
+          # injected into the environment by the preceding step when the
+          # certificate secret is present; otherwise the macOS build is
+          # unsigned.
         with:
           # Create a draft release on tag push; we publish manually after we
           # verify the artifacts look right.

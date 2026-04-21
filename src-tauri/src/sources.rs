@@ -87,7 +87,7 @@ fn default_poll_secs() -> u64 {
     90
 }
 fn default_window_size() -> String {
-    "default".to_string()
+    "large".to_string()
 }
 
 /// Resolve a size-preset name to (width, height) in logical pixels. Unknown

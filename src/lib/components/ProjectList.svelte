@@ -62,6 +62,7 @@
         statusValue: string | null; // option_id or null for unset
         statusName: string | null;
         statusColor: string | null; // raw GitHub color enum for this option
+        statusIndex: number; // position in the project's status options (Infinity = no status)
       }> = [];
       for (const r of scope) {
         if (!r.snapshot) continue;
@@ -73,6 +74,10 @@
           const opt = status && sv?.option_id
             ? status.options.find((o) => o.id === sv.option_id)
             : null;
+          const idx =
+            status && sv?.option_id
+              ? status.options.findIndex((o) => o.id === sv.option_id)
+              : -1;
           out.push({
             sourceId: r.source_id,
             item,
@@ -80,9 +85,18 @@
             statusValue: sv?.option_id ?? null,
             statusName: sv?.text ?? null,
             statusColor: opt?.color ?? null,
+            statusIndex: idx < 0 ? Number.POSITIVE_INFINITY : idx,
           });
         }
       }
+      // Primary sort: status column order (as authored in the project).
+      // Secondary sort: most recently updated first within a column.
+      out.sort((a, b) => {
+        if (a.statusIndex !== b.statusIndex) {
+          return a.statusIndex - b.statusIndex;
+        }
+        return a.item.issue.updated_at < b.item.issue.updated_at ? 1 : -1;
+      });
       return out;
     })(),
   );
