@@ -282,6 +282,7 @@
   }
   .confirm {
     flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -293,9 +294,9 @@
   .confirm-sub {
     font-size: 11px;
     color: var(--text-dim);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.35;
   }
   .confirm-actions {
     display: flex;
