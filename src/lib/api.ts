@@ -196,6 +196,7 @@ export const api = {
   showWindow: () => invoke<void>("show_window"),
   hideWindow: () => invoke<void>("hide_window"),
   quit: () => invoke<void>("quit_app"),
+  openDevtools: () => invoke<void>("open_devtools"),
   setAutoHide: (enabled: boolean) =>
     invoke<void>("set_auto_hide", { enabled }),
   listProjects: () => invoke<ProjectSummary[]>("list_projects"),

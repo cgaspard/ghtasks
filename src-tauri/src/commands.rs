@@ -326,6 +326,19 @@ pub async fn quit_app(app: AppHandle) -> Result<()> {
     Ok(())
 }
 
+/// Open the WebView's developer tools so users can inspect network calls,
+/// check console logs, or diagnose sync issues without hunting for the
+/// right-click menu. The underlying Tauri method is gated on the
+/// `devtools` cargo feature, which our Cargo.toml enables for both dev
+/// and release builds.
+#[tauri::command]
+pub async fn open_devtools(app: AppHandle) -> Result<()> {
+    if let Some(win) = app.get_webview_window("main") {
+        win.open_devtools();
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn set_auto_hide(
     enabled: bool,

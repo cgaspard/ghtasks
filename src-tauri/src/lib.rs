@@ -123,6 +123,7 @@ pub fn run() {
             commands::show_window,
             commands::hide_window,
             commands::quit_app,
+            commands::open_devtools,
             commands::set_auto_hide,
             commands::list_projects,
             commands::fetch_all_projects,

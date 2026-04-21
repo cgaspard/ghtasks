@@ -104,13 +104,13 @@ const LIST_PROJECTS_QUERY: &str = r#"
 query ListProjects {
   viewer {
     login
-    projectsV2(first: 50, orderBy: {field: TITLE, direction: ASC}) {
+    projectsV2(first: 50) {
       nodes { id number title url closed owner { __typename ... on User { login } ... on Organization { login } } }
     }
     organizations(first: 50) {
       nodes {
         login
-        projectsV2(first: 50, orderBy: {field: TITLE, direction: ASC}) {
+        projectsV2(first: 50) {
           nodes { id number title url closed owner { __typename ... on User { login } ... on Organization { login } } }
         }
       }

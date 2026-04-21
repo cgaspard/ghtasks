@@ -51,7 +51,12 @@
     loadingProjects = true;
     try {
       projects = await api.listProjects();
+      console.log(
+        `[ghtasks] list_projects returned ${projects.length} project(s)`,
+        projects.map((p) => `${p.owner_login}/#${p.number} ${p.title}`),
+      );
     } catch (e) {
+      console.error("[ghtasks] list_projects failed:", e);
       $lastError = String(e);
     } finally {
       loadingProjects = false;
@@ -260,6 +265,16 @@
             }))}
             onChange={(v) => onProjectPicked(v ?? "")}
           />
+          {#if !loadingProjects && projects.length === 0}
+            <div class="hint muted">
+              No projects visible. If you expect to see org projects:
+              <br />• The OAuth app may need approval from your org admin at
+              <code>github.com/organizations/&lt;org&gt;/settings/oauth_application_policy</code>.
+              <br />• If SSO is enforced, authorize the token at
+              <code>github.com/settings/applications</code> → GH Tasks.
+              <br />• Try signing out + back in (avatar menu → Sign out).
+            </div>
+          {/if}
         </label>
 
         <label>
