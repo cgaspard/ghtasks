@@ -19,6 +19,9 @@
     loading,
     lastSyncAt,
     projectsOnlyMine,
+    activeTab,
+    settingsSection,
+    settingsFocus,
   } from "../stores";
   import FilterPicker from "./FilterPicker.svelte";
   import StatusPicker from "./StatusPicker.svelte";
@@ -284,6 +287,12 @@
     await openUrl(issue.html_url);
   }
 
+  function goAddProject() {
+    settingsFocus.set("new-project");
+    $settingsSection = "sources";
+    $activeTab = "settings";
+  }
+
   async function changeStatus(
     sourceId: string,
     item: ProjectItem,
@@ -482,11 +491,31 @@
         boards.
       </div>
     </div>
+  {:else if projectSources.length === 0}
+    <div class="empty cta">
+      <div class="cta-icon" aria-hidden="true">📋</div>
+      <div class="cta-title">Add your first Project</div>
+      <div class="cta-body">
+        GH Tasks shows items from GitHub <strong>Projects v2</strong>
+        boards — with their Status, assignees, labels, and inline status
+        changes. Pick a board you already use (team roadmap, personal
+        tracker, sprint board) and its items stream in.
+      </div>
+      <button class="primary cta-btn" onclick={goAddProject}>
+        + Add a Project
+      </button>
+      <div class="cta-hint muted">
+        Prefer tracking a repo's issues instead?
+        Add a <strong>Repo</strong> source in
+        <button class="linklike" onclick={() => {
+          $settingsSection = 'sources';
+          $activeTab = 'settings';
+        }}>Settings → Sources</button>.
+      </div>
+    </div>
   {:else if filtered.length === 0}
     <div class="empty">
-      {#if projectSources.length === 0}
-        No Project sources yet. Add one in the <strong>Sources</strong> tab.
-      {:else if activeResults.length === 0}
+      {#if activeResults.length === 0}
         Hit the ↻ refresh button to load items.
       {:else}
         No items match.
@@ -679,6 +708,46 @@
     to {
       transform: rotate(360deg);
     }
+  }
+  .cta {
+    padding: 28px 24px;
+    gap: 8px;
+  }
+  .cta-icon {
+    font-size: 32px;
+    line-height: 1;
+    margin-bottom: 2px;
+  }
+  .cta-title {
+    color: var(--text);
+    font-weight: 600;
+    font-size: 15px;
+  }
+  .cta-body {
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1.5;
+    max-width: 320px;
+  }
+  .cta-btn {
+    margin-top: 10px;
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .cta-hint {
+    font-size: 11px;
+    margin-top: 6px;
+    max-width: 300px;
+    line-height: 1.5;
+  }
+  .linklike {
+    all: unset;
+    cursor: pointer;
+    color: var(--accent);
+  }
+  .linklike:hover {
+    text-decoration: underline;
   }
   .src-errors {
     padding: 6px 10px;

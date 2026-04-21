@@ -10,7 +10,29 @@ permissions:
   contents: write
 
 jobs:
+  # Fail the whole release fast if there are no per-version release notes.
+  # Avoids burning ~30 min of macOS/Windows/Linux build time only to
+  # discover we forgot the markdown file for the tag.
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require release_notes/<tag>.md
+        shell: bash
+        run: |
+          NOTES_FILE="release_notes/${{ github.ref_name }}.md"
+          if [ ! -f "$NOTES_FILE" ]; then
+            echo "::error title=Missing release notes::Expected $NOTES_FILE for tag ${{ github.ref_name }}. Create the file, commit, retag, and push."
+            exit 1
+          fi
+          if [ ! -s "$NOTES_FILE" ]; then
+            echo "::error title=Empty release notes::$NOTES_FILE exists but is empty."
+            exit 1
+          fi
+          echo "Release notes present: $NOTES_FILE"
+
   build:
+    needs: preflight
     strategy:
       fail-fast: false
       matrix:
@@ -67,6 +89,17 @@ jobs:
       - name: Install npm deps
         run: npm ci
 
+      # Preflight guarantees release_notes/<tag>.md exists; just load it.
+      - name: Load release notes
+        shell: bash
+        run: |
+          NOTES_FILE="release_notes/${{ github.ref_name }}.md"
+          {
+            echo "RELEASE_BODY<<__EOF__"
+            cat "$NOTES_FILE"
+            echo "__EOF__"
+          } >> "$GITHUB_ENV"
+
       # Export Apple signing env vars ONLY if the certificate secret is
       # present. An empty APPLE_CERTIFICATE tells tauri-action to try
       # signing with an empty cert, which breaks the macOS build.
@@ -97,12 +130,7 @@ jobs:
           # verify the artifacts look right.
           tagName: ${{ github.ref_name }}
           releaseName: "GH Tasks ${{ github.ref_name }}"
-          releaseBody: |
-            Automated build for ${{ github.ref_name }}.
-
-            - macOS: `.dmg` (universal, Apple Silicon + Intel)
-            - Windows: `.msi`
-            - Linux: `.AppImage` and `.deb`
+          releaseBody: ${{ env.RELEASE_BODY }}
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

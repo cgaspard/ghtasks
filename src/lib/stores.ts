@@ -195,6 +195,11 @@ export const settingsSection = persistent<"general" | "sources" | "about">(
   "general",
 );
 
+/** Transient (not persisted) pointer for deep-links from list CTAs. When
+ * non-null, the Sources editor auto-opens the matching new-source form on
+ * mount, then clears this. */
+export const settingsFocus = writable<"new-project" | "new-repo" | null>(null);
+
 /** Flat list of issues across enabled, selected sources, deduped by node_id. */
 export const visibleIssues = derived(
   [sourceResults, selectedSourceIds],

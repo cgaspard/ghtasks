@@ -11,6 +11,9 @@
     lastSyncAt,
     auth,
     issuesOnlyMine,
+    activeTab,
+    settingsSection,
+    settingsFocus,
   } from "../stores";
 
   let filter = $state("");
@@ -18,6 +21,15 @@
   let confirmingId: string | null = $state(null);
   let closing = $state(false);
   const myLogin = $derived($auth.user?.login ?? "");
+  const repoSources = $derived(
+    $sources.filter((s) => s.kind === "repo"),
+  );
+
+  function goAddRepo() {
+    settingsFocus.set("new-repo");
+    $settingsSection = "sources";
+    $activeTab = "settings";
+  }
 
   const filtered = $derived(
     $visibleIssues.filter(({ issue }) => {
@@ -165,11 +177,27 @@
       <div class="loader-label">Loading issues…</div>
       <div class="loader-hint muted">Fetching from GitHub.</div>
     </div>
+  {:else if repoSources.length === 0}
+    <div class="empty cta">
+      <div class="cta-icon" aria-hidden="true">📬</div>
+      <div class="cta-title">Add your first Repository</div>
+      <div class="cta-body">
+        The Issues tab pulls in open issues across any repo you track —
+        with your own search query (defaults to open Tasks). Great for
+        watching a repo you don't own, surfacing bugs assigned to you, or
+        keeping tabs on PRs awaiting your review.
+      </div>
+      <button class="primary cta-btn" onclick={goAddRepo}>
+        + Add a Repository
+      </button>
+      <div class="cta-hint muted">
+        Looking for board items with Status columns?
+        Use the <strong>Projects</strong> tab instead.
+      </div>
+    </div>
   {:else if filtered.length === 0}
     <div class="empty">
-      {#if $sources.length === 0}
-        No sources yet. Add one in the <strong>Sources</strong> tab.
-      {:else if sourceErrors.length > 0}
+      {#if sourceErrors.length > 0}
         All sources errored. Check the messages above.
       {:else}
         No issues match this query.
@@ -338,6 +366,38 @@
   }
   .loader-hint {
     font-size: 11px;
+  }
+  .cta {
+    padding: 28px 24px;
+    gap: 8px;
+  }
+  .cta-icon {
+    font-size: 32px;
+    line-height: 1;
+    margin-bottom: 2px;
+  }
+  .cta-title {
+    color: var(--text);
+    font-weight: 600;
+    font-size: 15px;
+  }
+  .cta-body {
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1.5;
+    max-width: 320px;
+  }
+  .cta-btn {
+    margin-top: 10px;
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .cta-hint {
+    font-size: 11px;
+    margin-top: 6px;
+    max-width: 300px;
+    line-height: 1.5;
   }
   @keyframes loader-spin {
     to {

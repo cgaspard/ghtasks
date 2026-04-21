@@ -1,6 +1,14 @@
 <script lang="ts">
+  import { onMount } from "svelte";
+  import { get } from "svelte/store";
   import { api, type ProjectSummary, type Repo, type Source } from "../api";
-  import { sources, projectResults, sourceResults, lastError } from "../stores";
+  import {
+    sources,
+    projectResults,
+    sourceResults,
+    lastError,
+    settingsFocus,
+  } from "../stores";
   import Select from "./Select.svelte";
 
   interface Props {
@@ -105,6 +113,16 @@
     showForm = true;
     loadRepos();
   }
+
+  // Deep-link: if a list CTA set settingsFocus before navigating here,
+  // auto-open the matching form. Cleared so reopening Sources doesn't
+  // re-trigger it.
+  onMount(() => {
+    const focus = get(settingsFocus);
+    if (focus === "new-project") newProjectSource();
+    else if (focus === "new-repo") newRepoSource();
+    if (focus) settingsFocus.set(null);
+  });
 
   function edit(s: Source) {
     const draft = { ...s } as Draft;
