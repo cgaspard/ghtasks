@@ -2,6 +2,8 @@ mod auth;
 mod commands;
 mod error;
 mod github;
+mod http_log;
+mod migration;
 mod notify;
 mod projects;
 mod sources;
@@ -51,6 +53,11 @@ pub fn run() {
         })
         .manage::<AutoHideOnBlur>(Arc::new(AtomicBool::new(true)))
         .setup(|app| {
+            // One-shot data migration from the legacy `dev.ghtasks.app`
+            // identifier to `com.cgaspard.ghtasks`. Runs before anything
+            // else reads the store so saved sources/settings carry over.
+            migration::migrate_store_from_legacy(app);
+
             // Build the tray. On desktop only — mobile has no tray.
             #[cfg(desktop)]
             tray::setup(app)?;

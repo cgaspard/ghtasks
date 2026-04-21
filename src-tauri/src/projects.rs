@@ -16,14 +16,18 @@ async fn graphql<T: for<'de> Deserialize<'de>>(
     query: &str,
     variables: Value,
 ) -> Result<T> {
-    let resp = client
-        .post(GRAPHQL_URL)
-        .bearer_auth(token)
-        .header("Accept", "application/vnd.github+json")
-        .header("X-GitHub-Api-Version", "2022-11-28")
-        .json(&json!({ "query": query, "variables": variables }))
-        .send()
-        .await?;
+    let label = graphql_label(query);
+    let resp = crate::http_log::send_timed(
+        client,
+        &format!("graphql:{label}"),
+        client
+            .post(GRAPHQL_URL)
+            .bearer_auth(token)
+            .header("Accept", "application/vnd.github+json")
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .json(&json!({ "query": query, "variables": variables })),
+    )
+    .await?;
 
     let status = resp.status();
     let raw = resp.text().await.unwrap_or_default();
@@ -62,6 +66,24 @@ async fn graphql<T: for<'de> Deserialize<'de>>(
     }
     env.data
         .ok_or_else(|| Error::Other("graphql: empty data".into()))
+}
+
+/// Extract the operation name from a GraphQL query (e.g. `query Foo(...)` →
+/// `Foo`, `mutation Bar` → `Bar`). Used as a short label in latency logs.
+fn graphql_label(query: &str) -> String {
+    for line in query.lines() {
+        let trimmed = line.trim();
+        for prefix in ["query ", "mutation ", "subscription "] {
+            if let Some(rest) = trimmed.strip_prefix(prefix) {
+                return rest
+                    .split(|c: char| c == '(' || c == '{' || c.is_whitespace())
+                    .find(|s| !s.is_empty())
+                    .unwrap_or("anon")
+                    .to_string();
+            }
+        }
+    }
+    "anon".to_string()
 }
 
 // ---- list_projects -----------------------------------------------------
@@ -262,22 +284,21 @@ query ProjectFields($id: ID!) {
 "#;
 
 const PROJECT_ITEMS_QUERY: &str = r#"
-query ProjectItems($id: ID!, $after: String) {
+query ProjectItems($id: ID!, $after: String, $q: String) {
   node(id: $id) {
     ... on ProjectV2 {
-      items(first: 100, after: $after) {
+      items(first: 100, after: $after, query: $q) {
+        totalCount
         pageInfo { hasNextPage endCursor }
         nodes {
           id
           content {
             __typename
             ... on Issue {
-              id number title url state updatedAt createdAt
+              id number title url state updatedAt
               repository { nameWithOwner }
-              author { login avatarUrl }
               assignees(first: 10) { nodes { login avatarUrl } }
-              labels(first: 20) { nodes { name color } }
-              comments { totalCount }
+              labels(first: 5) { nodes { name color } }
             }
           }
           fieldValues(first: 30) {
@@ -316,6 +337,7 @@ pub async fn fetch_project_snapshot(
     client: &reqwest::Client,
     token: &str,
     project_id: &str,
+    items_query: &str,
 ) -> Result<ProjectSnapshot> {
     // Fields + page-1 of items run concurrently — they don't depend on each
     // other. Later pages still need cursors from the previous page.
@@ -329,7 +351,11 @@ pub async fn fetch_project_snapshot(
         client,
         token,
         PROJECT_ITEMS_QUERY,
-        json!({ "id": project_id, "after": Option::<String>::None }),
+        json!({
+            "id": project_id,
+            "after": Option::<String>::None,
+            "q": items_query,
+        }),
     );
     let (fields_raw, first_page_raw) = tokio::try_join!(fields_fut, first_page_fut)?;
 
@@ -377,7 +403,11 @@ pub async fn fetch_project_snapshot(
             client,
             token,
             PROJECT_ITEMS_QUERY,
-            json!({ "id": project_id, "after": after }),
+            json!({
+                "id": project_id,
+                "after": after,
+                "q": items_query,
+            }),
         )
         .await?;
     }
@@ -416,10 +446,18 @@ pub async fn stream_project_snapshot<F>(
     token: &str,
     source_id: &str,
     project_id: &str,
+    items_query: &str,
+    prior_cursors: &[String],
     mut on_page: F,
-) where
+) -> Vec<String>
+where
     F: FnMut(ProjectPageEvent),
 {
+    log::info!(
+        "stream_project_snapshot: source={source_id} filter={:?} prior_cursors={}",
+        items_query,
+        prior_cursors.len()
+    );
     // Fields + first page in parallel.
     let fields_fut = graphql::<Value>(
         client,
@@ -431,7 +469,11 @@ pub async fn stream_project_snapshot<F>(
         client,
         token,
         PROJECT_ITEMS_QUERY,
-        json!({ "id": project_id, "after": Option::<String>::None }),
+        json!({
+            "id": project_id,
+            "after": Option::<String>::None,
+            "q": items_query,
+        }),
     );
     let (fields_raw, first_page_raw) = match tokio::try_join!(fields_fut, first_page_fut) {
         Ok(t) => t,
@@ -445,7 +487,7 @@ pub async fn stream_project_snapshot<F>(
                 is_final: true,
                 error: Some(e.to_string()),
             });
-            return;
+            return vec![];
         }
     };
 
@@ -461,7 +503,7 @@ pub async fn stream_project_snapshot<F>(
                 is_final: true,
                 error: Some("project not found".into()),
             });
-            return;
+            return vec![];
         }
     };
 
@@ -477,77 +519,179 @@ pub async fn stream_project_snapshot<F>(
                 is_final: true,
                 error: Some(e.to_string()),
             });
-            return;
+            return vec![];
         }
     };
     let fields = parse_project_fields(&node);
 
-    let mut page_raw = first_page_raw;
-    let mut is_first = true;
-    loop {
-        let items_node = match page_raw.pointer("/node/items").cloned() {
-            Some(n) => n,
+    // Collected cursors we'll persist for next-time speculation. These are
+    // the `endCursor` values of successful pages, in page order.
+    let mut collected_cursors: Vec<String> = Vec::new();
+
+    // --- Page 1 (already fetched) ----------------------------------------
+    let (page1_items, page1_has_next, page1_end_cursor, page1_total) =
+        match parse_items_page(&first_page_raw) {
+            Some(p) => p,
             None => {
                 on_page(ProjectPageEvent {
                     source_id: source_id.to_string(),
                     project: project.clone(),
-                    fields: if is_first { fields.clone() } else { vec![] },
+                    fields: fields.clone(),
                     items: vec![],
-                    is_first,
+                    is_first: true,
                     is_final: true,
                     error: Some("project.items missing".into()),
                 });
-                return;
+                return vec![];
             }
         };
-        let nodes = items_node
-            .get("nodes")
-            .and_then(|v| v.as_array())
-            .cloned()
-            .unwrap_or_default();
-        let items: Vec<ProjectItem> = nodes
-            .iter()
-            .filter_map(|n| parse_project_item(n))
-            .collect();
+    log::info!(
+        "stream_project_snapshot: source={source_id} server total_matching={page1_total}"
+    );
 
-        let page_info = items_node.get("pageInfo");
-        let has_next = page_info
-            .and_then(|p| p.get("hasNextPage"))
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-
-        let is_final = !has_next;
+    // If this is the only page, we're done after emitting it.
+    if !page1_has_next {
         on_page(ProjectPageEvent {
             source_id: source_id.to_string(),
             project: project.clone(),
-            fields: if is_first { fields.clone() } else { vec![] },
-            items,
-            is_first,
-            is_final,
+            fields: fields.clone(),
+            items: page1_items,
+            is_first: true,
+            is_final: true,
             error: None,
         });
-        is_first = false;
+        return collected_cursors;
+    }
 
-        if !has_next {
-            return;
+    // Capture page-1 cursor so the next sync can parallelize including it.
+    if let Some(c) = page1_end_cursor.clone() {
+        collected_cursors.push(c);
+    }
+
+    // Emit page 1 immediately (non-final because we know there's more).
+    on_page(ProjectPageEvent {
+        source_id: source_id.to_string(),
+        project: project.clone(),
+        fields: fields.clone(),
+        items: page1_items,
+        is_first: true,
+        is_final: false,
+        error: None,
+    });
+
+    // --- Parallel-cursor batch (pages 2..prior_cursors.len()+1) ---------
+    // prior_cursors[i] is the endCursor of page (i+1), which is the
+    // `after` for page (i+2). So prior_cursors.len() additional pages can
+    // be fired speculatively. First sync: prior_cursors is empty → skip.
+    let mut last_serial_cursor: Option<String> = page1_end_cursor;
+    if !prior_cursors.is_empty() {
+        let mut futs = Vec::with_capacity(prior_cursors.len());
+        for (i, cur) in prior_cursors.iter().enumerate() {
+            let c = client.clone();
+            let tok = token.to_string();
+            let pid = project_id.to_string();
+            let q = items_query.to_string();
+            let cursor = cur.clone();
+            futs.push(tokio::spawn(async move {
+                let result = graphql::<Value>(
+                    &c,
+                    &tok,
+                    PROJECT_ITEMS_QUERY,
+                    json!({ "id": pid, "after": cursor, "q": q }),
+                )
+                .await;
+                (i, result)
+            }));
         }
 
-        let after: Option<String> = page_info
-            .and_then(|p| p.get("endCursor"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        if after.is_none() {
-            return;
+        // Collect in-order so we can persist the cursor chain correctly.
+        let mut outcomes: Vec<Option<(Vec<ProjectItem>, bool, Option<String>)>> =
+            vec![None; prior_cursors.len()];
+        for h in futs {
+            match h.await {
+                Ok((i, Ok(raw))) => {
+                    if let Some((items, has_next, end)) =
+                        parse_items_page(&raw).map(|(it, hn, ec, _tot)| (it, hn, ec))
+                    {
+                        outcomes[i] = Some((items, has_next, end));
+                    } else {
+                        log::warn!(
+                            "parallel-cursor page {i} parse failed for source={source_id}"
+                        );
+                    }
+                }
+                Ok((i, Err(e))) => {
+                    log::warn!(
+                        "parallel-cursor page {i} request failed for source={source_id}: {e}"
+                    );
+                }
+                Err(e) => {
+                    log::warn!(
+                        "parallel-cursor join error for source={source_id}: {e}"
+                    );
+                }
+            }
         }
-        page_raw = match graphql(
+
+        // Emit in cursor order; stop at first missing / broken page so we
+        // can serial-recover from that point.
+        let mut hit_gap = false;
+        for (i, outcome) in outcomes.into_iter().enumerate() {
+            if hit_gap {
+                break;
+            }
+            match outcome {
+                Some((items, has_next, end)) => {
+                    if let Some(ref c) = end {
+                        collected_cursors.push(c.clone());
+                    }
+                    last_serial_cursor = end.clone();
+                    let is_final_guess = !has_next && i + 1 == prior_cursors.len();
+                    on_page(ProjectPageEvent {
+                        source_id: source_id.to_string(),
+                        project: project.clone(),
+                        fields: vec![],
+                        items,
+                        is_first: false,
+                        // We don't KNOW this is final until serial-tail check
+                        // below confirms, but if the cursor set matched the
+                        // project exactly, this is the final page.
+                        is_final: is_final_guess,
+                        error: None,
+                    });
+                    if !has_next {
+                        // Parallel batch completed the project exactly.
+                        return collected_cursors;
+                    }
+                }
+                None => {
+                    hit_gap = true;
+                }
+            }
+        }
+    }
+
+    // --- Serial tail (first sync OR stale cursor set) -------------------
+    // Starting from `last_serial_cursor`, keep pulling until hasNextPage is
+    // false. Emits one event per page with is_final on the last.
+    loop {
+        let after = match last_serial_cursor.clone() {
+            Some(c) => c,
+            None => break,
+        };
+        let raw = match graphql::<Value>(
             client,
             token,
             PROJECT_ITEMS_QUERY,
-            json!({ "id": project_id, "after": after }),
+            json!({
+                "id": project_id,
+                "after": after,
+                "q": items_query,
+            }),
         )
         .await
         {
-            Ok(p) => p,
+            Ok(v) => v,
             Err(e) => {
                 on_page(ProjectPageEvent {
                     source_id: source_id.to_string(),
@@ -558,10 +702,75 @@ pub async fn stream_project_snapshot<F>(
                     is_final: true,
                     error: Some(e.to_string()),
                 });
-                return;
+                return collected_cursors;
             }
         };
+        let (items, has_next, end, _) = match parse_items_page(&raw) {
+            Some(p) => p,
+            None => {
+                on_page(ProjectPageEvent {
+                    source_id: source_id.to_string(),
+                    project: project.clone(),
+                    fields: vec![],
+                    items: vec![],
+                    is_first: false,
+                    is_final: true,
+                    error: Some("project.items missing".into()),
+                });
+                return collected_cursors;
+            }
+        };
+        if let Some(ref c) = end {
+            collected_cursors.push(c.clone());
+        }
+        on_page(ProjectPageEvent {
+            source_id: source_id.to_string(),
+            project: project.clone(),
+            fields: vec![],
+            items,
+            is_first: false,
+            is_final: !has_next,
+            error: None,
+        });
+        if !has_next {
+            return collected_cursors;
+        }
+        last_serial_cursor = end;
     }
+
+    collected_cursors
+}
+
+/// Parse one page of `items` from a raw GraphQL response. Returns
+/// (items, has_next_page, end_cursor, total_count). Returns None when the
+/// expected JSON shape is missing entirely.
+fn parse_items_page(
+    raw: &Value,
+) -> Option<(Vec<ProjectItem>, bool, Option<String>, u64)> {
+    let items_node = raw.pointer("/node/items")?;
+    let nodes = items_node
+        .get("nodes")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let items: Vec<ProjectItem> = nodes
+        .iter()
+        .filter_map(|n| parse_project_item(n))
+        .collect();
+    let page_info = items_node.get("pageInfo");
+    let has_next = page_info
+        .and_then(|p| p.get("hasNextPage"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let end_cursor = page_info
+        .and_then(|p| p.get("endCursor"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let total = items_node
+        .get("totalCount")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    Some((items, has_next, end_cursor, total))
 }
 
 fn placeholder_project(id: &str) -> ProjectSummary {
@@ -985,14 +1194,17 @@ pub async fn add_issue_comment(
     let url = format!(
         "https://api.github.com/repos/{repo_full_name}/issues/{number}/comments"
     );
-    let resp = client
-        .post(&url)
-        .bearer_auth(token)
-        .header("Accept", "application/vnd.github+json")
-        .header("X-GitHub-Api-Version", "2022-11-28")
-        .json(&json!({ "body": body }))
-        .send()
-        .await?;
+    let resp = crate::http_log::send_timed(
+        client,
+        "add_issue_comment",
+        client
+            .post(&url)
+            .bearer_auth(token)
+            .header("Accept", "application/vnd.github+json")
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .json(&json!({ "body": body })),
+    )
+    .await?;
     let status = resp.status();
     if !status.is_success() {
         let msg = resp.text().await.unwrap_or_default();

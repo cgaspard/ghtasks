@@ -19,9 +19,57 @@ export const auth = writable<AuthStatus>({
 
 export const sources = writable<Source[]>([]);
 
-export const sourceResults = writable<SourceResult[]>([]);
+/** Cached source-results from the previous sync. Hydrated instantly on
+ * launch so the user never sees a blank "Loading issues…" state. */
+export const sourceResults = persistent<SourceResult[]>(
+  "sourceResults",
+  [],
+  {
+    serialize: (v) => JSON.stringify(v),
+    deserialize: (raw) => {
+      try {
+        const arr = JSON.parse(raw);
+        return Array.isArray(arr) ? arr : [];
+      } catch {
+        return [];
+      }
+    },
+  },
+);
 
-export const projectResults = writable<ProjectFetchResult[]>([]);
+/** Cached project snapshots from the previous sync. Same rationale. */
+export const projectResults = persistent<ProjectFetchResult[]>(
+  "projectResults",
+  [],
+  {
+    serialize: (v) => {
+      // Guard against runaway cache size (e.g. 10k-item projects) by
+      // silently dropping the cache above 2000 items total. Better to eat
+      // a cold refresh than to blow past the localStorage quota.
+      const total = v.reduce(
+        (n, r) => n + (r.snapshot?.items.length ?? 0),
+        0,
+      );
+      if (total > 2000) return "[]";
+      return JSON.stringify(v);
+    },
+    deserialize: (raw) => {
+      try {
+        const arr = JSON.parse(raw);
+        return Array.isArray(arr) ? arr : [];
+      } catch {
+        return [];
+      }
+    },
+  },
+);
+
+/** Timestamp of when the cache was last written, so we can display
+ * "synced Xm ago" correctly even before the first fresh sync completes. */
+export const lastCacheWriteAt = persistent<number | null>(
+  "lastCacheWriteAt",
+  null,
+);
 
 /** Source chips selected on the Issues tab. Persisted. */
 export const selectedSourceIds = persistent<Set<string>>(
@@ -86,6 +134,49 @@ export const lastSyncAt = writable<number | null>(null);
 
 /** Number of new items detected in the most recent sync (vs. prior snapshot). */
 export const newSinceLastSync = writable<number>(0);
+
+/** Issues created by us in the last N seconds. The Search API and our
+ * project snapshot may briefly exclude them; we use this buffer to keep
+ * them on screen until the server catches up.
+ *
+ * Keyed by issue node_id. Value holds what we need to re-inject:
+ *   - `issue` (full REST shape so repo-source results can re-show it)
+ *   - `repo` (full name, for repo-source matching)
+ *   - `projectSourceId` (optional; for project snapshot re-inject)
+ *   - `item` (optional; full ProjectItem if we created one)
+ *   - `createdAt` (ms; used for TTL eviction)
+ */
+export type RecentlyCreatedEntry = {
+  issue: Issue;
+  repo: string;
+  projectSourceId?: string;
+  item?: import("./api").ProjectItem;
+  createdAt: number;
+};
+export const recentlyCreated = writable<Map<string, RecentlyCreatedEntry>>(
+  new Map(),
+);
+const RECENT_TTL_MS = 120_000;
+
+/** Drop expired entries in place. Call before reading. */
+export function pruneRecentlyCreated() {
+  const now = Date.now();
+  recentlyCreated.update((m) => {
+    const next = new Map(m);
+    for (const [k, v] of next) {
+      if (now - v.createdAt > RECENT_TTL_MS) next.delete(k);
+    }
+    return next;
+  });
+}
+
+export function recordRecentlyCreated(entry: RecentlyCreatedEntry) {
+  recentlyCreated.update((m) => {
+    const next = new Map(m);
+    next.set(entry.issue.node_id, entry);
+    return next;
+  });
+}
 
 export const lastError = writable<string | null>(null);
 

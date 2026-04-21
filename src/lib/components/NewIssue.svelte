@@ -10,6 +10,7 @@
     auth,
     lastError,
     projectResults,
+    recordRecentlyCreated,
     showNewIssue,
     sourceResults,
     sources,
@@ -174,17 +175,29 @@
           statusOptionId || undefined,
         );
         created = res.issue;
-        insertOptimistically(
+        const projectItem = buildProjectItem(
           created,
-          projectSrc.id,
           repo,
           res.item_id,
           statusField?.id,
           statusOptionId || undefined,
         );
+        insertProjectItem(projectSrc.id, projectItem);
+        recordRecentlyCreated({
+          issue: created,
+          repo,
+          projectSourceId: projectSrc.id,
+          item: projectItem,
+          createdAt: Date.now(),
+        });
       } else {
         created = await api.createIssue(repo, input);
         insertOptimistically(created, undefined, repo);
+        recordRecentlyCreated({
+          issue: created,
+          repo,
+          createdAt: Date.now(),
+        });
       }
 
       reset();
@@ -198,71 +211,77 @@
     }
   }
 
-  /** Push a freshly-created Issue into our local stores so the UI updates
-   * immediately, before the next full refresh lands. */
+  /** Push a freshly-created Issue into a matching Repo source. */
   function insertOptimistically(
     issue: Issue,
-    projectSourceId: string | undefined,
+    _projectSourceIdIgnored: string | undefined,
     repoFullName: string,
-    itemId?: string,
+  ) {
+    const targetSourceId = $sources.find(
+      (s) => s.kind === "repo" && s.repo === repoFullName && s.enabled,
+    )?.id;
+    if (!targetSourceId) return;
+    $sourceResults = $sourceResults.map((r) => {
+      if (r.source_id !== targetSourceId) return r;
+      if (r.issues.some((i) => i.node_id === issue.node_id)) return r;
+      return { ...r, issues: [issue, ...r.issues] };
+    });
+  }
+
+  /** Build a ProjectItem shell for a freshly-created issue, capturing the
+   * server-assigned item_id and the chosen initial status field-value. */
+  function buildProjectItem(
+    issue: Issue,
+    repoFullName: string,
+    itemId: string,
     initialStatusFieldId?: string,
     initialStatusOptionId?: string,
-  ) {
-    if (projectSourceId) {
-      // Project path: find the matching project snapshot and prepend.
-      $projectResults = $projectResults.map((r) => {
-        if (r.source_id !== projectSourceId || !r.snapshot) return r;
-        if (
-          r.snapshot.items.some((it) => it.issue.node_id === issue.node_id)
-        ) {
-          return r;
-        }
-        const fieldValues: import("../api").ProjectItemFieldValue[] = [];
-        if (initialStatusFieldId && initialStatusOptionId) {
-          const field = r.snapshot.fields.find(
-            (f) => f.id === initialStatusFieldId,
-          );
-          const opt = field?.options.find(
-            (o) => o.id === initialStatusOptionId,
-          );
-          if (field && opt) {
-            fieldValues.push({
-              field_id: field.id,
-              field_name: field.name,
-              data_type: field.data_type,
-              option_id: opt.id,
-              text: opt.name,
-            });
-          }
-        }
-        const item = {
-          // Prefer the real ProjectV2Item id we got back from the server.
-          item_id: itemId ?? `optimistic:${issue.node_id}`,
-          issue,
-          repo: repoFullName,
-          field_values: fieldValues,
-        };
-        return {
-          ...r,
-          snapshot: {
-            ...r.snapshot,
-            items: [item, ...r.snapshot.items],
-          },
-        };
-      });
-    } else {
-      // Repo path: find a SourceResult whose source is a repo source for
-      // the same repo and prepend.
-      const targetSourceId = $sources.find(
-        (s) => s.kind === "repo" && s.repo === repoFullName && s.enabled,
-      )?.id;
-      if (!targetSourceId) return;
-      $sourceResults = $sourceResults.map((r) => {
-        if (r.source_id !== targetSourceId) return r;
-        if (r.issues.some((i) => i.node_id === issue.node_id)) return r;
-        return { ...r, issues: [issue, ...r.issues] };
-      });
+  ): import("../api").ProjectItem {
+    const snap = $projectResults.find((r) => r.source_id === projectSourceId)
+      ?.snapshot;
+    const fieldValues: import("../api").ProjectItemFieldValue[] = [];
+    if (snap && initialStatusFieldId && initialStatusOptionId) {
+      const field = snap.fields.find((f) => f.id === initialStatusFieldId);
+      const opt = field?.options.find((o) => o.id === initialStatusOptionId);
+      if (field && opt) {
+        fieldValues.push({
+          field_id: field.id,
+          field_name: field.name,
+          data_type: field.data_type,
+          option_id: opt.id,
+          text: opt.name,
+        });
+      }
     }
+    return {
+      item_id: itemId,
+      issue,
+      repo: repoFullName,
+      field_values: fieldValues,
+    };
+  }
+
+  /** Prepend a ProjectItem into the target project snapshot. No-op if that
+   * snapshot doesn't exist yet or already has this node_id. */
+  function insertProjectItem(
+    projectSourceId: string,
+    item: import("../api").ProjectItem,
+  ) {
+    $projectResults = $projectResults.map((r) => {
+      if (r.source_id !== projectSourceId || !r.snapshot) return r;
+      if (
+        r.snapshot.items.some((it) => it.issue.node_id === item.issue.node_id)
+      ) {
+        return r;
+      }
+      return {
+        ...r,
+        snapshot: {
+          ...r.snapshot,
+          items: [item, ...r.snapshot.items],
+        },
+      };
+    });
   }
 
   function onKey(e: KeyboardEvent) {

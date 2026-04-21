@@ -15,6 +15,7 @@
         owner_login: string;
         number: number;
         title: string;
+        items_query: string;
       };
 
   type Draft = {
@@ -76,6 +77,8 @@
       owner_login: "",
       number: 0,
       title: "",
+      // Default: exclude Released to keep fetches lean. Users can change it.
+      items_query: "-status:Released",
     };
     showForm = true;
     loadProjects();
@@ -97,7 +100,13 @@
   }
 
   function edit(s: Source) {
-    editing = { ...s } as Draft;
+    const draft = { ...s } as Draft;
+    // Backfill default for older stored project sources that pre-date the
+    // items_query field so the form always has a value.
+    if (draft.kind === "project" && !("items_query" in draft)) {
+      (draft as Draft & { kind: "project" }).items_query = "-status:Released";
+    }
+    editing = draft;
     showForm = true;
     if (s.kind === "repo") loadRepos();
     else loadProjects();
@@ -261,6 +270,21 @@
             bind:value={editing.name}
             placeholder={editing.title || "Source name"}
           />
+        </label>
+
+        <label>
+          Server-side filter
+          <textarea
+            rows="2"
+            bind:value={editing.items_query}
+            placeholder="-status:Released"
+          ></textarea>
+          <div class="hint muted">
+            GitHub Projects filter grammar, applied on the server. Examples:
+            <code>-status:Released</code>, <code>assignee:@me</code>,
+            <code>updated:&gt;@today-30d</code>. Leave empty to fetch all
+            items.
+          </div>
         </label>
       {:else}
         <label>

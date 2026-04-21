@@ -29,7 +29,20 @@ pub enum SourceKind {
         /// Project title — cached for display; updated on fetch.
         #[serde(default)]
         title: String,
+        /// Server-side filter passed to `ProjectV2.items(query:)`. Uses the
+        /// same grammar as the GitHub web UI / REST `q=` (e.g. `is:open`,
+        /// `-status:Released`, `assignee:@me`). Applied in GraphQL so we
+        /// never fetch items we don't care about. Defaults to empty.
+        #[serde(default = "default_project_query")]
+        items_query: String,
     },
+}
+
+fn default_project_query() -> String {
+    // Exclude Released items by default — most boards treat Released as a
+    // permanent landing pad, so pulling hundreds of them on every refresh
+    // is wasted work. Users can override per-source.
+    "-status:Released".to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -229,3 +242,24 @@ pub fn save_seen(app: &AppHandle, source_id: &str, ids: &[String]) -> Result<()>
     store.save().map_err(Error::from)?;
     Ok(())
 }
+
+/// GraphQL page cursors from the last successful sync of a project, in
+/// page-order. Used by Stage-3 parallel-cursor refresh: after page 1 returns
+/// its cursor, we fire pages 2..N concurrently using these as speculative
+/// cursors. If the project's size has shifted, we patch up the tail
+/// sequentially. First sync (no cursors) falls back to serial paging.
+pub fn load_cursors(app: &AppHandle, source_id: &str) -> Result<Vec<String>> {
+    let store = store_handle(app)?;
+    let key = format!("cursors:{source_id}");
+    let v = store.get(&key).unwrap_or(serde_json::Value::Array(vec![]));
+    Ok(serde_json::from_value(v).unwrap_or_default())
+}
+
+pub fn save_cursors(app: &AppHandle, source_id: &str, cursors: &[String]) -> Result<()> {
+    let store = store_handle(app)?;
+    let key = format!("cursors:{source_id}");
+    store.set(key, serde_json::to_value(cursors)?);
+    store.save().map_err(Error::from)?;
+    Ok(())
+}
+

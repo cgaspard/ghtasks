@@ -53,11 +53,14 @@ pub async fn get_authenticated_user(
     client: &reqwest::Client,
     token: &str,
 ) -> Result<User> {
-    let resp = client
-        .get(format!("{API_BASE}/user"))
-        .headers(auth_headers(token))
-        .send()
-        .await?;
+    let resp = crate::http_log::send_timed(
+        client,
+        "get_user",
+        client
+            .get(format!("{API_BASE}/user"))
+            .headers(auth_headers(token)),
+    )
+    .await?;
     json(resp).await
 }
 
@@ -78,14 +81,16 @@ pub async fn list_user_repos(
     client: &reqwest::Client,
     token: &str,
 ) -> Result<Vec<Repo>> {
-    // Affiliate with owner+collaborator+org, sort by last updated, up to 100.
-    let resp = client
-        .get(format!(
-            "{API_BASE}/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member"
-        ))
-        .headers(auth_headers(token))
-        .send()
-        .await?;
+    let resp = crate::http_log::send_timed(
+        client,
+        "list_user_repos",
+        client
+            .get(format!(
+                "{API_BASE}/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member"
+            ))
+            .headers(auth_headers(token)),
+    )
+    .await?;
     json(resp).await
 }
 
@@ -146,13 +151,16 @@ pub async fn list_repo_labels(
 ) -> Result<Vec<RepoLabel>> {
     let mut out: Vec<RepoLabel> = Vec::new();
     for page in 1..=5u32 {
-        let resp = client
-            .get(format!(
-                "{API_BASE}/repos/{repo_full_name}/labels?per_page=100&page={page}"
-            ))
-            .headers(auth_headers(token))
-            .send()
-            .await?;
+        let resp = crate::http_log::send_timed(
+            client,
+            "list_repo_labels",
+            client
+                .get(format!(
+                    "{API_BASE}/repos/{repo_full_name}/labels?per_page=100&page={page}"
+                ))
+                .headers(auth_headers(token)),
+        )
+        .await?;
         let batch: Vec<RepoLabel> = json(resp).await?;
         let got = batch.len();
         out.extend(batch);
@@ -169,12 +177,15 @@ pub async fn search_issues(
     token: &str,
     query: &str,
 ) -> Result<Vec<Issue>> {
-    let resp = client
-        .get(format!("{API_BASE}/search/issues"))
-        .headers(auth_headers(token))
-        .query(&[("q", query), ("per_page", "50"), ("sort", "updated")])
-        .send()
-        .await?;
+    let resp = crate::http_log::send_timed(
+        client,
+        "search_issues",
+        client
+            .get(format!("{API_BASE}/search/issues"))
+            .headers(auth_headers(token))
+            .query(&[("q", query), ("per_page", "50"), ("sort", "updated")]),
+    )
+    .await?;
     let data: SearchResponse<Issue> = json(resp).await?;
     Ok(data.items)
 }
@@ -198,12 +209,15 @@ pub async fn create_issue(
     repo_full_name: &str,
     input: &NewIssueInput,
 ) -> Result<Issue> {
-    let resp = client
-        .post(format!("{API_BASE}/repos/{repo_full_name}/issues"))
-        .headers(auth_headers(token))
-        .json(input)
-        .send()
-        .await?;
+    let resp = crate::http_log::send_timed(
+        client,
+        "create_issue",
+        client
+            .post(format!("{API_BASE}/repos/{repo_full_name}/issues"))
+            .headers(auth_headers(token))
+            .json(input),
+    )
+    .await?;
     json(resp).await
 }
 
@@ -216,13 +230,16 @@ pub async fn set_issue_state(
     state: &str,
 ) -> Result<Issue> {
     let body = serde_json::json!({ "state": state });
-    let resp = client
-        .patch(format!(
-            "{API_BASE}/repos/{repo_full_name}/issues/{number}"
-        ))
-        .headers(auth_headers(token))
-        .json(&body)
-        .send()
-        .await?;
+    let resp = crate::http_log::send_timed(
+        client,
+        "set_issue_state",
+        client
+            .patch(format!(
+                "{API_BASE}/repos/{repo_full_name}/issues/{number}"
+            ))
+            .headers(auth_headers(token))
+            .json(&body),
+    )
+    .await?;
     json(resp).await
 }

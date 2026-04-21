@@ -373,8 +373,12 @@ pub async fn fetch_all_projects(
     // Spawn concurrent fetches. Ordered results using a Vec<JoinHandle>.
     let mut handles = Vec::with_capacity(project_sources.len());
     for src in project_sources {
-        let project_id = match &src.kind {
-            sources::SourceKind::Project { project_id, .. } => project_id.clone(),
+        let (project_id, items_query) = match &src.kind {
+            sources::SourceKind::Project {
+                project_id,
+                items_query,
+                ..
+            } => (project_id.clone(), items_query.clone()),
             _ => continue,
         };
         let http = state.http.clone();
@@ -384,11 +388,15 @@ pub async fn fetch_all_projects(
         handles.push(tokio::spawn(async move {
             let t0 = std::time::Instant::now();
             log::debug!(
-                "fetch_all_projects: starting source={} project_id={}",
+                "fetch_all_projects: starting source={} project_id={} filter={:?}",
                 src_name,
-                project_id
+                project_id,
+                items_query
             );
-            let res = projects::fetch_project_snapshot(&http, &token, &project_id).await;
+            let res = projects::fetch_project_snapshot(
+                &http, &token, &project_id, &items_query,
+            )
+            .await;
             let ms = t0.elapsed().as_millis();
             match &res {
                 Ok(snap) => log::info!(
@@ -458,8 +466,12 @@ pub async fn fetch_all_projects_streaming(
 
     let mut handles = Vec::with_capacity(project_sources.len());
     for src in project_sources {
-        let project_id = match &src.kind {
-            sources::SourceKind::Project { project_id, .. } => project_id.clone(),
+        let (project_id, items_query) = match &src.kind {
+            sources::SourceKind::Project {
+                project_id,
+                items_query,
+                ..
+            } => (project_id.clone(), items_query.clone()),
             _ => continue,
         };
         let http = state.http.clone();
@@ -467,15 +479,22 @@ pub async fn fetch_all_projects_streaming(
         let app2 = app.clone();
         let src_id = src.id.clone();
         let src_name = src.name.clone();
+        // Load prior-run cursors so we can speculatively fan out pages in
+        // parallel. First run (empty) falls back to serial paging.
+        let prior_cursors =
+            sources::load_cursors(&app, &src_id).unwrap_or_default();
+        let app_for_save = app.clone();
         handles.push(tokio::spawn(async move {
             let t0 = std::time::Instant::now();
             let mut page_count = 0usize;
             let mut item_count = 0usize;
-            projects::stream_project_snapshot(
+            let fresh_cursors = projects::stream_project_snapshot(
                 &http,
                 &token,
                 &src_id,
                 &project_id,
+                &items_query,
+                &prior_cursors,
                 |evt| {
                     page_count += 1;
                     item_count += evt.items.len();
@@ -486,12 +505,22 @@ pub async fn fetch_all_projects_streaming(
             )
             .await;
             log::info!(
-                "fetch_all_projects_streaming: source={} pages={} items={} took={}ms",
+                "fetch_all_projects_streaming: source={} pages={} items={} took={}ms (prior_cursors={} fresh_cursors={})",
                 src_name,
                 page_count,
                 item_count,
-                t0.elapsed().as_millis()
+                t0.elapsed().as_millis(),
+                prior_cursors.len(),
+                fresh_cursors.len(),
             );
+            // Persist cursors for the next sync's speculative fan-out.
+            if !fresh_cursors.is_empty() {
+                if let Err(e) =
+                    sources::save_cursors(&app_for_save, &src_id, &fresh_cursors)
+                {
+                    log::warn!("failed to save cursors for source={src_id}: {e}");
+                }
+            }
         }));
     }
 

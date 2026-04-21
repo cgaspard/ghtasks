@@ -79,6 +79,9 @@ export type SourceKind =
       owner_login: string;
       number: number;
       title: string;
+      /** Server-side Projects v2 filter grammar passed to
+       * `ProjectV2.items(query:)`. E.g. `-status:Released is:open`. */
+      items_query: string;
     };
 
 export type Source = {

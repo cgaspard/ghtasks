@@ -12,8 +12,12 @@
     activeTab,
     showNewIssue,
     lastSyncAt,
+    lastCacheWriteAt,
     newSinceLastSync,
+    recentlyCreated,
+    pruneRecentlyCreated,
   } from "./lib/stores";
+  import { get } from "svelte/store";
   import Login from "./lib/components/Login.svelte";
   import IssueList from "./lib/components/IssueList.svelte";
   import ProjectList from "./lib/components/ProjectList.svelte";
@@ -103,9 +107,16 @@
     let mergedItems = Array.from(byId.values());
 
     // On the final page of a generation, drop items that were NOT seen in
-    // this generation (archived / removed upstream).
+    // this generation (archived / removed upstream) — but keep any items
+    // that we know we just created (the server may not have indexed them
+    // into the project's items() list yet).
     if (evt.is_final) {
-      mergedItems = mergedItems.filter((i) => tracker!.ids.has(i.item_id));
+      pruneRecentlyCreated();
+      const recents = get(recentlyCreated);
+      mergedItems = mergedItems.filter(
+        (i) =>
+          tracker!.ids.has(i.item_id) || recents.has(i.issue.node_id),
+      );
     }
 
     // Update fields only when the incoming event carries them (first page).
@@ -127,6 +138,33 @@
     );
   }
 
+  /** Merge freshly-created issues (from the recentlyCreated buffer) back
+   * into the SourceResult list whenever the GitHub Search API hasn't
+   * indexed them yet. */
+  function reinjectRecentIntoSourceResults(
+    serverResults: typeof $sourceResults,
+    currentSources: typeof $sources,
+  ): typeof $sourceResults {
+    pruneRecentlyCreated();
+    const recents = [...get(recentlyCreated).values()];
+    if (recents.length === 0) return serverResults;
+    let out = serverResults.map((r) => ({ ...r, issues: [...r.issues] }));
+    for (const entry of recents) {
+      const targetSourceId = currentSources.find(
+        (s) => s.kind === "repo" && s.repo === entry.repo && s.enabled,
+      )?.id;
+      if (!targetSourceId) continue;
+      const srIndex = out.findIndex((r) => r.source_id === targetSourceId);
+      if (srIndex < 0) continue;
+      const already = out[srIndex].issues.some(
+        (i) => i.node_id === entry.issue.node_id,
+      );
+      if (already) continue;
+      out[srIndex].issues = [entry.issue, ...out[srIndex].issues];
+    }
+    return out;
+  }
+
   async function refresh() {
     if (!$auth.authenticated) return;
     $loading = true;
@@ -134,6 +172,7 @@
     refreshGeneration++;
     const gen = refreshGeneration;
     priorIdsSnapshot = knownNodeIds();
+    pruneRecentlyCreated();
     console.log(
       `[ghtasks] refresh() gen=${gen} streaming projects + fetching repos`,
     );
@@ -147,7 +186,9 @@
       ]);
       if (gen !== refreshGeneration) return; // superseded
       $sources = srcs;
-      $sourceResults = results;
+      // Before replacing repo source results, keep items that are in our
+      // recently-created buffer (Search API needs ~60s to index).
+      $sourceResults = reinjectRecentIntoSourceResults(results, srcs);
 
       // Count new items — streamed projectResults already reflect pages.
       const allIds = knownNodeIds();
@@ -155,6 +196,10 @@
       for (const id of allIds) if (!priorIdsSnapshot.has(id)) fresh++;
       $newSinceLastSync = priorIdsSnapshot.size === 0 ? 0 : fresh;
       $lastSyncAt = Date.now();
+      // Persist the "cache written at" timestamp so future cold launches
+      // can show "synced Xm ago" against the cached data before the first
+      // fresh sync lands.
+      $lastCacheWriteAt = $lastSyncAt;
 
       const issueTotal = results.reduce((n, r) => n + r.issues.length, 0);
       const projectTotal = $projectResults.reduce(
@@ -177,6 +222,27 @@
       const status = await api.authStatus();
       $auth = status;
       if (status.authenticated) {
+        // Hydrate: if the persistent store already has results, let the UI
+        // render them instantly by seeding lastSyncAt from the cache
+        // timestamp. The refresh() that follows will stream fresh pages
+        // and reconcile on top of the hydrated state.
+        if (
+          $lastCacheWriteAt !== null &&
+          ($sourceResults.length > 0 || $projectResults.length > 0)
+        ) {
+          $lastSyncAt = $lastCacheWriteAt;
+          const sCount = $sourceResults.reduce(
+            (n, r) => n + r.issues.length,
+            0,
+          );
+          const pCount = $projectResults.reduce(
+            (n, r) => n + (r.snapshot?.items.length ?? 0),
+            0,
+          );
+          console.log(
+            `[ghtasks] hydrated ${sCount} issue(s) + ${pCount} project item(s) from cache`,
+          );
+        }
         await refresh();
       }
     } catch (e) {

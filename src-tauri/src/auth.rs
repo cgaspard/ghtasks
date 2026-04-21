@@ -1,8 +1,11 @@
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-const KEYRING_SERVICE: &str = "dev.ghtasks.app";
+const KEYRING_SERVICE: &str = "com.cgaspard.ghtasks";
 const KEYRING_ACCOUNT: &str = "github-token";
+/// Previous service name (pre-v0.1.5). Checked by `load_token` for a
+/// one-time migration so existing users don't have to re-authenticate.
+const LEGACY_KEYRING_SERVICE: &str = "dev.ghtasks.app";
 
 /// Default client id points to the public "GH Tasks" GitHub App / OAuth app.
 /// Override at build time with the `GHTASKS_CLIENT_ID` env var (read via
@@ -157,10 +160,37 @@ pub fn store_token(token: &str) -> Result<()> {
 }
 
 /// Retrieve the token from the OS keychain if present.
+///
+/// Performs a one-time migration from the legacy `dev.ghtasks.app` service
+/// name so existing installs don't have to re-authenticate after the
+/// bundle-identifier rename.
 pub fn load_token() -> Result<Option<String>> {
     let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)?;
     match entry.get_password() {
-        Ok(t) => Ok(Some(t)),
+        Ok(t) => return Ok(Some(t)),
+        Err(keyring::Error::NoEntry) => {}
+        Err(e) => return Err(Error::Keyring(e)),
+    }
+
+    // New-style entry absent — try legacy and migrate in place.
+    let legacy = keyring::Entry::new(LEGACY_KEYRING_SERVICE, KEYRING_ACCOUNT)?;
+    match legacy.get_password() {
+        Ok(t) => {
+            log::info!(
+                "migrating GitHub token from legacy keychain entry ({LEGACY_KEYRING_SERVICE}) to {KEYRING_SERVICE}"
+            );
+            if let Err(e) = entry.set_password(&t) {
+                log::warn!("failed to copy token to new keychain entry: {e}");
+                // Fall back to returning the legacy value; we'll retry next launch.
+                return Ok(Some(t));
+            }
+            // Best-effort cleanup of the legacy entry. Failures here are
+            // harmless — the entry will just sit there unused.
+            if let Err(e) = legacy.delete_credential() {
+                log::debug!("legacy keychain entry cleanup failed (harmless): {e}");
+            }
+            Ok(Some(t))
+        }
         Err(keyring::Error::NoEntry) => Ok(None),
         Err(e) => Err(Error::Keyring(e)),
     }
