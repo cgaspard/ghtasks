@@ -58,6 +58,7 @@
   }
 
   const PRESETS: Array<{ label: string; q: string }> = [
+    { label: "Open Tasks", q: "is:issue is:open type:Task" },
     { label: "My open issues", q: "is:issue is:open assignee:@me" },
     { label: "Issues I opened", q: "is:issue is:open author:@me" },
     { label: "All open issues", q: "is:issue is:open" },
