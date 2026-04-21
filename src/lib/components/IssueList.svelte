@@ -7,22 +7,35 @@
     visibleIssues,
     selectedSourceIds,
     showNewIssue,
+    loading,
+    lastSyncAt,
+    auth,
+    issuesOnlyMine,
   } from "../stores";
 
   let filter = $state("");
   /** node_id of the issue pending close-confirm (null = none). */
   let confirmingId: string | null = $state(null);
   let closing = $state(false);
+  const myLogin = $derived($auth.user?.login ?? "");
 
   const filtered = $derived(
-    $visibleIssues.filter(({ issue }) =>
-      filter.trim() === ""
-        ? true
-        : issue.title.toLowerCase().includes(filter.toLowerCase()) ||
-          issue.labels.some((l) =>
-            l.name.toLowerCase().includes(filter.toLowerCase()),
-          ),
-    ),
+    $visibleIssues.filter(({ issue }) => {
+      // Assignee filter (Mine toggle).
+      if ($issuesOnlyMine && myLogin) {
+        const mine = issue.assignees?.some(
+          (a) => a.login.toLowerCase() === myLogin.toLowerCase(),
+        );
+        if (!mine) return false;
+      }
+      // Text filter.
+      if (filter.trim() === "") return true;
+      const needle = filter.toLowerCase();
+      return (
+        issue.title.toLowerCase().includes(needle) ||
+        issue.labels.some((l) => l.name.toLowerCase().includes(needle))
+      );
+    }),
   );
 
   const sourceErrors = $derived(
@@ -102,10 +115,24 @@
 
   {#if $sources.length > 0}
     <div class="chips">
+      <div class="seg" role="group" aria-label="Assignee filter">
+        <button
+          class="seg-btn"
+          class:active={$issuesOnlyMine}
+          onclick={() => ($issuesOnlyMine = true)}
+          title="Only issues assigned to me">Mine</button
+        >
+        <button
+          class="seg-btn"
+          class:active={!$issuesOnlyMine}
+          onclick={() => ($issuesOnlyMine = false)}
+          title="Show every issue returned by my sources">All</button
+        >
+      </div>
       <button
         class="chip"
         class:active={$selectedSourceIds.size === 0}
-        onclick={clearSelection}>All</button
+        onclick={clearSelection}>All sources</button
       >
       {#each $sources.filter((s) => s.enabled && s.kind === "repo") as s (s.id)}
         <button
@@ -132,7 +159,13 @@
     </div>
   {/if}
 
-  {#if filtered.length === 0}
+  {#if $loading && $lastSyncAt === null}
+    <div class="empty">
+      <div class="loader" aria-hidden="true"></div>
+      <div class="loader-label">Loading issues…</div>
+      <div class="loader-hint muted">Fetching from GitHub.</div>
+    </div>
+  {:else if filtered.length === 0}
     <div class="empty">
       {#if $sources.length === 0}
         No sources yet. Add one in the <strong>Sources</strong> tab.
@@ -225,11 +258,34 @@
   .chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: 6px;
     padding: 8px 10px;
     border-bottom: 1px solid var(--border);
     background: var(--bg);
     flex: 0 0 auto;
+    align-items: center;
+  }
+  .seg {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--bg-elev);
+  }
+  .seg-btn {
+    all: unset;
+    cursor: pointer;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-dim);
+  }
+  .seg-btn:hover {
+    color: var(--text);
+  }
+  .seg-btn.active {
+    background: var(--accent);
+    color: white;
   }
   .chip {
     --chip: var(--accent);
@@ -259,6 +315,34 @@
     padding: 24px;
     text-align: center;
     color: var(--text-dim);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex: 1;
+    min-height: 0;
+  }
+  .loader {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    animation: loader-spin 0.8s linear infinite;
+  }
+  .loader-label {
+    color: var(--text);
+    font-weight: 500;
+    font-size: 13px;
+  }
+  .loader-hint {
+    font-size: 11px;
+  }
+  @keyframes loader-spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
   .issues {
     list-style: none;

@@ -16,6 +16,9 @@
     lastError,
     showNewIssue,
     auth,
+    loading,
+    lastSyncAt,
+    projectsOnlyMine,
   } from "../stores";
   import FilterPicker from "./FilterPicker.svelte";
   import StatusPicker from "./StatusPicker.svelte";
@@ -26,8 +29,6 @@
   let filter = $state("");
   let commentingId: string | null = $state(null);
   let commentText = $state("");
-  /** Default to only showing items assigned to the signed-in user. */
-  let onlyMine = $state(true);
 
   const myLogin = $derived($auth.user?.login ?? "");
 
@@ -211,7 +212,7 @@
   const filtered = $derived(
     allItems.filter(({ item, statusName }) => {
       // Assignee filter: items where I'm assigned.
-      if (onlyMine && myLogin) {
+      if ($projectsOnlyMine && myLogin) {
         const mine = item.issue.assignees?.some(
           (a) => a.login.toLowerCase() === myLogin.toLowerCase(),
         );
@@ -372,16 +373,16 @@
       <div class="seg" role="group" aria-label="Assignee filter">
         <button
           class="seg-btn"
-          class:active={onlyMine}
-          onclick={() => (onlyMine = true)}
+          class:active={$projectsOnlyMine}
+          onclick={() => ($projectsOnlyMine = true)}
           title="Only items assigned to me"
         >
           Mine
         </button>
         <button
           class="seg-btn"
-          class:active={!onlyMine}
-          onclick={() => (onlyMine = false)}
+          class:active={!$projectsOnlyMine}
+          onclick={() => ($projectsOnlyMine = false)}
           title="Show all items in the project"
         >
           All
@@ -468,7 +469,16 @@
     </div>
   {/if}
 
-  {#if filtered.length === 0}
+  {#if $loading && $lastSyncAt === null}
+    <div class="empty">
+      <div class="loader" aria-hidden="true"></div>
+      <div class="loader-label">Loading your projects…</div>
+      <div class="loader-hint muted">
+        Fetching items from GitHub. This may take a few seconds on large
+        boards.
+      </div>
+    </div>
+  {:else if filtered.length === 0}
     <div class="empty">
       {#if projectSources.length === 0}
         No Project sources yet. Add one in the <strong>Sources</strong> tab.
@@ -643,6 +653,34 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+  .loader {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    animation: spin 0.8s linear infinite;
+  }
+  .loader-label {
+    color: var(--text);
+    font-weight: 500;
+    font-size: 13px;
+  }
+  .loader-hint {
+    font-size: 11px;
+    max-width: 260px;
+    line-height: 1.4;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
   .src-errors {
     padding: 6px 10px;

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api } from "./lib/api";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+  import { api, type ProjectPageEvent } from "./lib/api";
   import {
     auth,
     sources,
@@ -21,6 +22,15 @@
   import TopBar from "./lib/components/TopBar.svelte";
 
   let pollHandle: ReturnType<typeof setInterval> | null = null;
+  let unlistenProjectPage: UnlistenFn | null = null;
+  /** Bumped on each refresh. Pages arriving for an older generation are
+   * ignored so late stragglers don't leak into the next refresh. */
+  let refreshGeneration = 0;
+  /** Accumulated node_ids before the current refresh started, for new-count. */
+  let priorIdsSnapshot: Set<string> = new Set();
+  /** Per-source: which item_ids have we seen in the current generation?
+   * Used so the final page can evict items no longer on the board. */
+  const seenItemsByGen = new Map<string, { gen: number; ids: Set<string> }>();
 
   /** Collect every issue/project-item node_id currently in the stores. */
   function knownNodeIds(): Set<string> {
@@ -36,50 +46,129 @@
     return set;
   }
 
+  function handleProjectPage(gen: number, evt: ProjectPageEvent) {
+    if (gen !== refreshGeneration) return; // stale
+    $projectResults = reconcileProjectPage($projectResults, gen, evt);
+  }
+
+  /** Merge an incoming page into the existing snapshot **without clearing**
+   * what's already on screen. Items are upserted by item_id; on the final
+   * page, items whose id was not seen during this generation are dropped
+   * (they were archived / removed on the server). */
+  function reconcileProjectPage(
+    current: typeof $projectResults,
+    gen: number,
+    evt: ProjectPageEvent,
+  ): typeof $projectResults {
+    const existing = current.find((r) => r.source_id === evt.source_id);
+
+    if (evt.error) {
+      const errored = {
+        source_id: evt.source_id,
+        snapshot: existing?.snapshot ?? null,
+        error: evt.error,
+      };
+      return existing
+        ? current.map((r) => (r.source_id === evt.source_id ? errored : r))
+        : [...current, errored];
+    }
+
+    // Reset seen-tracker when a new generation's first page arrives.
+    let tracker = seenItemsByGen.get(evt.source_id);
+    if (!tracker || tracker.gen !== gen) {
+      tracker = { gen, ids: new Set() };
+      seenItemsByGen.set(evt.source_id, tracker);
+    }
+    for (const it of evt.items) tracker.ids.add(it.item_id);
+
+    // If nothing prior, just seed with what we have so far.
+    if (!existing?.snapshot) {
+      const fresh = {
+        source_id: evt.source_id,
+        snapshot: {
+          project: evt.project,
+          fields: evt.fields,
+          items: [...evt.items],
+        },
+        error: null,
+      };
+      return existing
+        ? current.map((r) => (r.source_id === evt.source_id ? fresh : r))
+        : [...current, fresh];
+    }
+
+    // Upsert this page's items by item_id — no clearing.
+    const byId = new Map(existing.snapshot.items.map((i) => [i.item_id, i]));
+    for (const incoming of evt.items) byId.set(incoming.item_id, incoming);
+    let mergedItems = Array.from(byId.values());
+
+    // On the final page of a generation, drop items that were NOT seen in
+    // this generation (archived / removed upstream).
+    if (evt.is_final) {
+      mergedItems = mergedItems.filter((i) => tracker!.ids.has(i.item_id));
+    }
+
+    // Update fields only when the incoming event carries them (first page).
+    const fields = evt.fields.length > 0 ? evt.fields : existing.snapshot.fields;
+    // Project metadata refreshes on every page (cheap).
+    const project = evt.project.id ? evt.project : existing.snapshot.project;
+
+    const next = {
+      ...existing,
+      snapshot: {
+        project,
+        fields,
+        items: mergedItems,
+      },
+      error: null,
+    };
+    return current.map((r) =>
+      r.source_id === evt.source_id ? next : r,
+    );
+  }
+
   async function refresh() {
     if (!$auth.authenticated) return;
     $loading = true;
     $lastError = null;
-    console.log("[ghtasks] refresh() invoking fetchAll + fetchAllProjects");
-    const priorIds = knownNodeIds();
+    refreshGeneration++;
+    const gen = refreshGeneration;
+    priorIdsSnapshot = knownNodeIds();
+    console.log(
+      `[ghtasks] refresh() gen=${gen} streaming projects + fetching repos`,
+    );
     try {
-      const [srcs, results, projects] = await Promise.all([
+      // Kick off both in parallel. Repo fetch is small (search API);
+      // project stream fires events that we already listen for.
+      const [srcs, results] = await Promise.all([
         api.listSources(),
         api.fetchAll(),
-        api.fetchAllProjects(),
+        api.fetchAllProjectsStreaming(),
       ]);
+      if (gen !== refreshGeneration) return; // superseded
       $sources = srcs;
       $sourceResults = results;
-      $projectResults = projects;
 
-      // Count items in the new payload that weren't in the prior snapshot.
+      // Count new items — streamed projectResults already reflect pages.
+      const allIds = knownNodeIds();
       let fresh = 0;
-      for (const r of results) {
-        for (const i of r.issues)
-          if (i.node_id && !priorIds.has(i.node_id)) fresh++;
-      }
-      for (const r of projects) {
-        for (const it of r.snapshot?.items ?? []) {
-          if (it.issue.node_id && !priorIds.has(it.issue.node_id)) fresh++;
-        }
-      }
-      // Don't surface "new" on the very first sync (priorIds is empty).
-      $newSinceLastSync = priorIds.size === 0 ? 0 : fresh;
+      for (const id of allIds) if (!priorIdsSnapshot.has(id)) fresh++;
+      $newSinceLastSync = priorIdsSnapshot.size === 0 ? 0 : fresh;
       $lastSyncAt = Date.now();
 
       const issueTotal = results.reduce((n, r) => n + r.issues.length, 0);
-      const projectTotal = projects.reduce(
+      const projectTotal = $projectResults.reduce(
         (n, r) => n + (r.snapshot?.items.length ?? 0),
         0,
       );
       console.log(
-        `[ghtasks] refresh() complete: ${srcs.length} source(s), ${issueTotal} issue(s), ${projectTotal} project item(s), new=${$newSinceLastSync}`,
+        `[ghtasks] refresh() gen=${gen} complete: ${srcs.length} source(s), ${issueTotal} issue(s), ${projectTotal} project item(s), new=${$newSinceLastSync}`,
       );
     } catch (e) {
       console.error("[ghtasks] refresh() failed:", e);
       $lastError = String(e);
     } finally {
-      $loading = false;
+      if (gen === refreshGeneration) $loading = false;
     }
   }
 
@@ -103,6 +192,14 @@
   }
 
   onMount(() => {
+    // Subscribe to streamed project pages once. Each event gets merged
+    // into $projectResults, gated by generation so stale pages are dropped.
+    void listen<ProjectPageEvent>("project-page", (e) => {
+      handleProjectPage(refreshGeneration, e.payload);
+    }).then((fn) => {
+      unlistenProjectPage = fn;
+    });
+
     void refreshAuth();
     // Poll every 90s while authenticated.
     pollHandle = setInterval(() => {
@@ -111,6 +208,7 @@
     window.addEventListener("keydown", onKeydown);
     return () => {
       if (pollHandle) clearInterval(pollHandle);
+      if (unlistenProjectPage) unlistenProjectPage();
       window.removeEventListener("keydown", onKeydown);
     };
   });

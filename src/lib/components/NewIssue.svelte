@@ -1,7 +1,21 @@
 <script lang="ts">
-  import { api, type Repo, type RepoLabel, type Source } from "../api";
-  import { lastError, showNewIssue, sources } from "../stores";
+  import {
+    api,
+    type Issue,
+    type Repo,
+    type RepoLabel,
+    type Source,
+  } from "../api";
+  import {
+    auth,
+    lastError,
+    projectResults,
+    showNewIssue,
+    sourceResults,
+    sources,
+  } from "../stores";
   import FilterPicker from "./FilterPicker.svelte";
+  import StatusPicker from "./StatusPicker.svelte";
 
   interface Props {
     onCreated: () => Promise<void> | void;
@@ -16,8 +30,27 @@
   let title = $state("");
   let body = $state("");
   let selectedLabels = $state<Set<string>>(new Set());
-  let issueType = $state("");
+  let issueType = $state("Task");
+  let assignToMe = $state(true);
+  let statusOptionId = $state<string>("");
   let submitting = $state(false);
+
+  const myLogin = $derived($auth.user?.login ?? "");
+
+  /** Snapshot for the currently-selected project, if we already fetched it. */
+  const selectedProjectSnapshot = $derived(
+    $projectResults.find((r) => r.source_id === projectSourceId)?.snapshot ??
+      null,
+  );
+
+  /** The project's Status field (single-select named "Status"). */
+  const statusField = $derived(
+    selectedProjectSnapshot?.fields.find(
+      (f) =>
+        f.data_type === "SINGLE_SELECT" &&
+        f.name.toLowerCase() === "status",
+    ) ?? null,
+  );
 
   let repos: Repo[] = $state([]);
   let loadingRepos = $state(false);
@@ -57,6 +90,19 @@
   });
 
   $effect(() => {
+    // When project (and therefore its Status field) changes, pre-select the
+    // first option so new issues land under an active column by default.
+    if (!statusField) {
+      statusOptionId = "";
+      return;
+    }
+    const stillValid = statusField.options.some((o) => o.id === statusOptionId);
+    if (!stillValid) {
+      statusOptionId = statusField.options[0]?.id ?? "";
+    }
+  });
+
+  $effect(() => {
     // When the selected repo changes, fetch its labels. Reset prior selections
     // since a label name in repo A may not exist in repo B.
     if (!repo || repo === lastLabelsRepo) return;
@@ -86,7 +132,8 @@
     title = "";
     body = "";
     selectedLabels = new Set();
-    issueType = "";
+    issueType = "Task";
+    assignToMe = true;
   }
 
   async function submit(e: Event) {
@@ -101,29 +148,120 @@
       body: body.trim() || undefined,
       labels: selectedLabels.size > 0 ? [...selectedLabels] : undefined,
       type: issueType || undefined,
+      assignees: assignToMe && myLogin ? [myLogin] : undefined,
     };
     submitting = true;
     try {
+      let created: Issue;
+      let projectSrc:
+        | (Source & { kind: "project" })
+        | undefined;
+
       if (target === "project") {
-        const src = projectSources.find((s) => s.id === projectSourceId) as
+        projectSrc = projectSources.find((s) => s.id === projectSourceId) as
           | (Source & { kind: "project" })
           | undefined;
-        if (!src) {
+        if (!projectSrc) {
           $lastError = "Pick a project.";
           submitting = false;
           return;
         }
-        await api.createIssueInProject(repo, src.project_id, input);
+        const res = await api.createIssueInProject(
+          repo,
+          projectSrc.project_id,
+          input,
+          statusField?.id,
+          statusOptionId || undefined,
+        );
+        created = res.issue;
+        insertOptimistically(
+          created,
+          projectSrc.id,
+          repo,
+          res.item_id,
+          statusField?.id,
+          statusOptionId || undefined,
+        );
       } else {
-        await api.createIssue(repo, input);
+        created = await api.createIssue(repo, input);
+        insertOptimistically(created, undefined, repo);
       }
+
       reset();
-      await onCreated();
       $showNewIssue = false;
+      // Don't await — let the slow snapshot fetch run in the background.
+      void onCreated();
     } catch (e) {
       $lastError = String(e);
     } finally {
       submitting = false;
+    }
+  }
+
+  /** Push a freshly-created Issue into our local stores so the UI updates
+   * immediately, before the next full refresh lands. */
+  function insertOptimistically(
+    issue: Issue,
+    projectSourceId: string | undefined,
+    repoFullName: string,
+    itemId?: string,
+    initialStatusFieldId?: string,
+    initialStatusOptionId?: string,
+  ) {
+    if (projectSourceId) {
+      // Project path: find the matching project snapshot and prepend.
+      $projectResults = $projectResults.map((r) => {
+        if (r.source_id !== projectSourceId || !r.snapshot) return r;
+        if (
+          r.snapshot.items.some((it) => it.issue.node_id === issue.node_id)
+        ) {
+          return r;
+        }
+        const fieldValues: import("../api").ProjectItemFieldValue[] = [];
+        if (initialStatusFieldId && initialStatusOptionId) {
+          const field = r.snapshot.fields.find(
+            (f) => f.id === initialStatusFieldId,
+          );
+          const opt = field?.options.find(
+            (o) => o.id === initialStatusOptionId,
+          );
+          if (field && opt) {
+            fieldValues.push({
+              field_id: field.id,
+              field_name: field.name,
+              data_type: field.data_type,
+              option_id: opt.id,
+              text: opt.name,
+            });
+          }
+        }
+        const item = {
+          // Prefer the real ProjectV2Item id we got back from the server.
+          item_id: itemId ?? `optimistic:${issue.node_id}`,
+          issue,
+          repo: repoFullName,
+          field_values: fieldValues,
+        };
+        return {
+          ...r,
+          snapshot: {
+            ...r.snapshot,
+            items: [item, ...r.snapshot.items],
+          },
+        };
+      });
+    } else {
+      // Repo path: find a SourceResult whose source is a repo source for
+      // the same repo and prepend.
+      const targetSourceId = $sources.find(
+        (s) => s.kind === "repo" && s.repo === repoFullName && s.enabled,
+      )?.id;
+      if (!targetSourceId) return;
+      $sourceResults = $sourceResults.map((r) => {
+        if (r.source_id !== targetSourceId) return r;
+        if (r.issues.some((i) => i.node_id === issue.node_id)) return r;
+        return { ...r, issues: [issue, ...r.issues] };
+      });
     }
   }
 
@@ -174,6 +312,31 @@
             {/each}
           </select>
         </label>
+
+        {#if statusField}
+          <label>
+            Status
+            <StatusPicker
+              value={statusOptionId || null}
+              valueName={statusField.options.find(
+                (o) => o.id === statusOptionId,
+              )?.name ?? null}
+              valueColor={statusField.options.find(
+                (o) => o.id === statusOptionId,
+              )?.color ?? null}
+              options={statusField.options.map((o) => ({
+                id: o.id,
+                name: o.name,
+                color: o.color,
+              }))}
+              onPick={(opt) => (statusOptionId = opt ?? "")}
+            />
+          </label>
+        {:else if !selectedProjectSnapshot}
+          <div class="hint muted">
+            Status options will load once the project is synced.
+          </div>
+        {/if}
       {/if}
 
       <label>
@@ -238,6 +401,13 @@
           </select>
         </label>
       </div>
+
+      {#if myLogin}
+        <label class="inline">
+          <input type="checkbox" bind:checked={assignToMe} />
+          Assign to me ({myLogin})
+        </label>
+      {/if}
 
       <div class="actions">
         <button type="button" class="ghost" onclick={close}>Cancel</button>
@@ -318,6 +488,13 @@
     font-size: 12px;
     color: var(--text-dim);
   }
+  .form label.inline {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    color: var(--text);
+    font-size: 12px;
+  }
   .row {
     display: flex;
     gap: 8px;
@@ -330,5 +507,12 @@
     gap: 6px;
     justify-content: flex-end;
     margin-top: 4px;
+  }
+  .hint {
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .muted {
+    color: var(--text-dim);
   }
 </style>

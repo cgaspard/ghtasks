@@ -3,6 +3,7 @@ use crate::error::{Error, Result};
 use crate::github::{self, Issue, NewIssueInput, Repo, RepoLabel, User};
 use crate::notify;
 use crate::projects::{self, ProjectSnapshot, ProjectSummary};
+use tauri::Emitter;
 use crate::sources::{self, Settings, Source};
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
@@ -433,6 +434,77 @@ pub async fn fetch_all_projects(
     Ok(out)
 }
 
+/// Streaming variant of `fetch_all_projects`. Starts per-source fetches
+/// concurrently and emits each parsed page as a `project-page` event. Returns
+/// once every source has finished (or errored). Frontend should subscribe
+/// to `project-page` before invoking, then merge incoming pages into its
+/// store as they arrive.
+#[tauri::command]
+pub async fn fetch_all_projects_streaming(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    let overall_start = std::time::Instant::now();
+    let token = require_token().await?;
+    let all_sources = sources::list_sources(&app)?;
+    let project_sources: Vec<Source> = all_sources
+        .into_iter()
+        .filter(|s| s.enabled && matches!(s.kind, sources::SourceKind::Project { .. }))
+        .collect();
+    log::info!(
+        "fetch_all_projects_streaming: invoked; project_sources={}",
+        project_sources.len()
+    );
+
+    let mut handles = Vec::with_capacity(project_sources.len());
+    for src in project_sources {
+        let project_id = match &src.kind {
+            sources::SourceKind::Project { project_id, .. } => project_id.clone(),
+            _ => continue,
+        };
+        let http = state.http.clone();
+        let token = token.clone();
+        let app2 = app.clone();
+        let src_id = src.id.clone();
+        let src_name = src.name.clone();
+        handles.push(tokio::spawn(async move {
+            let t0 = std::time::Instant::now();
+            let mut page_count = 0usize;
+            let mut item_count = 0usize;
+            projects::stream_project_snapshot(
+                &http,
+                &token,
+                &src_id,
+                &project_id,
+                |evt| {
+                    page_count += 1;
+                    item_count += evt.items.len();
+                    if let Err(e) = app2.emit("project-page", &evt) {
+                        log::warn!("emit project-page failed: {e}");
+                    }
+                },
+            )
+            .await;
+            log::info!(
+                "fetch_all_projects_streaming: source={} pages={} items={} took={}ms",
+                src_name,
+                page_count,
+                item_count,
+                t0.elapsed().as_millis()
+            );
+        }));
+    }
+
+    for h in handles {
+        let _ = h.await;
+    }
+    log::info!(
+        "fetch_all_projects_streaming: complete; total={}ms",
+        overall_start.elapsed().as_millis()
+    );
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn set_project_item_status(
     state: State<'_, AppState>,
@@ -465,17 +537,46 @@ pub async fn add_issue_comment(
 }
 
 /// Create an issue and attach it to a ProjectV2 in one shot. Returns the
-/// created Issue (REST shape) so the caller can link / navigate.
+#[derive(Debug, Serialize)]
+pub struct CreateIssueInProjectResult {
+    pub issue: Issue,
+    pub item_id: String,
+}
+
+/// Create an issue, attach it to a project, and optionally set one
+/// single-select field (typically Status) in one round-trip from the
+/// frontend. Returns the Issue plus the ProjectV2Item id so the caller
+/// can reference the attached item for further mutations / optimistic UI.
 #[tauri::command]
 pub async fn create_issue_in_project(
     state: State<'_, AppState>,
     repo: String,
     project_id: String,
     input: NewIssueInput,
-) -> Result<Issue> {
+    status_field_id: Option<String>,
+    status_option_id: Option<String>,
+) -> Result<CreateIssueInProjectResult> {
     let token = require_token().await?;
     let issue = github::create_issue(&state.http, &token, &repo, &input).await?;
-    let _item_id =
+    let item_id =
         projects::add_item_to_project(&state.http, &token, &project_id, &issue.node_id).await?;
-    Ok(issue)
+
+    if let (Some(field_id), Some(option_id)) = (status_field_id, status_option_id.clone()) {
+        // Best-effort: if the status mutation fails, the item still exists on
+        // the board — just without a status. Log and return success.
+        if let Err(e) = projects::set_single_select_field(
+            &state.http,
+            &token,
+            &project_id,
+            &item_id,
+            &field_id,
+            Some(&option_id),
+        )
+        .await
+        {
+            log::warn!("create_issue_in_project: initial status set failed: {e}");
+        }
+    }
+
+    Ok(CreateIssueInProjectResult { issue, item_id })
 }

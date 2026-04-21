@@ -272,7 +272,7 @@ query ProjectItems($id: ID!, $after: String) {
           content {
             __typename
             ... on Issue {
-              id number title url state body updatedAt createdAt
+              id number title url state updatedAt createdAt
               repository { nameWithOwner }
               author { login avatarUrl }
               assignees(first: 10) { nodes { login avatarUrl } }
@@ -387,6 +387,193 @@ pub async fn fetch_project_snapshot(
         fields,
         items,
     })
+}
+
+/// Payload emitted for each page during a streaming fetch.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ProjectPageEvent {
+    /// The source id the caller knows this project by.
+    pub source_id: String,
+    /// Full project metadata. Populated on every page (cheap).
+    pub project: ProjectSummary,
+    /// All fields; populated on the first page only (empty vec on later pages).
+    pub fields: Vec<ProjectField>,
+    /// Items from this page. Caller appends.
+    pub items: Vec<ProjectItem>,
+    /// `true` on the first page of the stream.
+    pub is_first: bool,
+    /// `true` on the last page of the stream.
+    pub is_final: bool,
+    /// Any error that terminated the stream early.
+    pub error: Option<String>,
+}
+
+/// Like `fetch_project_snapshot` but emits each page via a callback as soon
+/// as it's parsed. The callback runs on the current task. On error, the
+/// callback is invoked once with `error: Some(...)` and `is_final: true`.
+pub async fn stream_project_snapshot<F>(
+    client: &reqwest::Client,
+    token: &str,
+    source_id: &str,
+    project_id: &str,
+    mut on_page: F,
+) where
+    F: FnMut(ProjectPageEvent),
+{
+    // Fields + first page in parallel.
+    let fields_fut = graphql::<Value>(
+        client,
+        token,
+        PROJECT_FIELDS_QUERY,
+        json!({ "id": project_id }),
+    );
+    let first_page_fut = graphql::<Value>(
+        client,
+        token,
+        PROJECT_ITEMS_QUERY,
+        json!({ "id": project_id, "after": Option::<String>::None }),
+    );
+    let (fields_raw, first_page_raw) = match tokio::try_join!(fields_fut, first_page_fut) {
+        Ok(t) => t,
+        Err(e) => {
+            on_page(ProjectPageEvent {
+                source_id: source_id.to_string(),
+                project: placeholder_project(project_id),
+                fields: vec![],
+                items: vec![],
+                is_first: true,
+                is_final: true,
+                error: Some(e.to_string()),
+            });
+            return;
+        }
+    };
+
+    let node = match fields_raw.get("node").cloned() {
+        Some(n) => n,
+        None => {
+            on_page(ProjectPageEvent {
+                source_id: source_id.to_string(),
+                project: placeholder_project(project_id),
+                fields: vec![],
+                items: vec![],
+                is_first: true,
+                is_final: true,
+                error: Some("project not found".into()),
+            });
+            return;
+        }
+    };
+
+    let project = match parse_project_summary(&node) {
+        Ok(p) => p,
+        Err(e) => {
+            on_page(ProjectPageEvent {
+                source_id: source_id.to_string(),
+                project: placeholder_project(project_id),
+                fields: vec![],
+                items: vec![],
+                is_first: true,
+                is_final: true,
+                error: Some(e.to_string()),
+            });
+            return;
+        }
+    };
+    let fields = parse_project_fields(&node);
+
+    let mut page_raw = first_page_raw;
+    let mut is_first = true;
+    loop {
+        let items_node = match page_raw.pointer("/node/items").cloned() {
+            Some(n) => n,
+            None => {
+                on_page(ProjectPageEvent {
+                    source_id: source_id.to_string(),
+                    project: project.clone(),
+                    fields: if is_first { fields.clone() } else { vec![] },
+                    items: vec![],
+                    is_first,
+                    is_final: true,
+                    error: Some("project.items missing".into()),
+                });
+                return;
+            }
+        };
+        let nodes = items_node
+            .get("nodes")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let items: Vec<ProjectItem> = nodes
+            .iter()
+            .filter_map(|n| parse_project_item(n))
+            .collect();
+
+        let page_info = items_node.get("pageInfo");
+        let has_next = page_info
+            .and_then(|p| p.get("hasNextPage"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let is_final = !has_next;
+        on_page(ProjectPageEvent {
+            source_id: source_id.to_string(),
+            project: project.clone(),
+            fields: if is_first { fields.clone() } else { vec![] },
+            items,
+            is_first,
+            is_final,
+            error: None,
+        });
+        is_first = false;
+
+        if !has_next {
+            return;
+        }
+
+        let after: Option<String> = page_info
+            .and_then(|p| p.get("endCursor"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        if after.is_none() {
+            return;
+        }
+        page_raw = match graphql(
+            client,
+            token,
+            PROJECT_ITEMS_QUERY,
+            json!({ "id": project_id, "after": after }),
+        )
+        .await
+        {
+            Ok(p) => p,
+            Err(e) => {
+                on_page(ProjectPageEvent {
+                    source_id: source_id.to_string(),
+                    project: project.clone(),
+                    fields: vec![],
+                    items: vec![],
+                    is_first: false,
+                    is_final: true,
+                    error: Some(e.to_string()),
+                });
+                return;
+            }
+        };
+    }
+}
+
+fn placeholder_project(id: &str) -> ProjectSummary {
+    ProjectSummary {
+        id: id.to_string(),
+        number: 0,
+        title: String::new(),
+        owner_login: String::new(),
+        owner_type: String::new(),
+        url: String::new(),
+        closed: false,
+    }
 }
 
 fn parse_project_summary(node: &Value) -> Result<ProjectSummary> {
@@ -588,10 +775,9 @@ fn parse_graphql_issue(content: &Value, repo: &str) -> Option<crate::github::Iss
         .and_then(|v| v.as_str())
         .unwrap_or("OPEN")
         .to_lowercase();
-    let body = content
-        .get("body")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+    // `body` intentionally not fetched in list view — saves ~40% payload on
+    // big projects. Detail view (future) can fetch on demand.
+    let body: Option<String> = None;
     let updated_at = content
         .get("updatedAt")
         .and_then(|v| v.as_str())

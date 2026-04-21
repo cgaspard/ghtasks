@@ -50,16 +50,23 @@
   function toggle(section: "general" | "sources" | "about") {
     $settingsSection = $settingsSection === section ? "general" : section;
   }
+
+  const sourcesOpen = $derived($settingsSection === "sources");
+  const generalOpen = $derived($settingsSection === "general");
+  const aboutOpen = $derived($settingsSection === "about");
 </script>
 
 <div class="wrap">
   <!-- Sources -->
-  <section class="acc">
+  <section class="acc" class:open={sourcesOpen}>
     <button class="acc-head" onclick={() => toggle("sources")}>
-      <span>Sources</span>
-      <span class="chev">{$settingsSection === "sources" ? "▾" : "▸"}</span>
+      <span class="icon" aria-hidden="true">{sourcesOpen ? "−" : "+"}</span>
+      <span class="acc-title">Sources</span>
+      <span class="status-tag" aria-hidden="true"
+        >{sourcesOpen ? "Hide" : "Show"}</span
+      >
     </button>
-    {#if $settingsSection === "sources"}
+    {#if sourcesOpen}
       <div class="acc-body no-pad">
         <SourceEditor onChanged={onSourcesChanged} />
       </div>
@@ -67,10 +74,13 @@
   </section>
 
   <!-- General -->
-  <section class="acc">
+  <section class="acc" class:open={generalOpen}>
     <button class="acc-head" onclick={() => toggle("general")}>
-      <span>General</span>
-      <span class="chev">{$settingsSection === "general" ? "▾" : "▸"}</span>
+      <span class="icon" aria-hidden="true">{generalOpen ? "−" : "+"}</span>
+      <span class="acc-title">General</span>
+      <span class="status-tag" aria-hidden="true"
+        >{generalOpen ? "Hide" : "Show"}</span
+      >
     </button>
     {#if $settingsSection === "general"}
       <div class="acc-body">
@@ -88,7 +98,7 @@
           Window size
           <select bind:value={settings.window_size} onchange={save}>
             <option value="compact">Compact (340 × 480)</option>
-            <option value="default">Default (380 × 560)</option>
+            <option value="default">Standard (380 × 560)</option>
             <option value="tall">Tall (380 × 760)</option>
             <option value="wide">Wide (480 × 560)</option>
             <option value="large">Large (480 × 760)</option>
@@ -123,10 +133,13 @@
   </section>
 
   <!-- About -->
-  <section class="acc">
+  <section class="acc" class:open={aboutOpen}>
     <button class="acc-head" onclick={() => toggle("about")}>
-      <span>About</span>
-      <span class="chev">{$settingsSection === "about" ? "▾" : "▸"}</span>
+      <span class="icon" aria-hidden="true">{aboutOpen ? "−" : "+"}</span>
+      <span class="acc-title">About</span>
+      <span class="status-tag" aria-hidden="true"
+        >{aboutOpen ? "Hide" : "Show"}</span
+      >
     </button>
     {#if $settingsSection === "about"}
       <div class="acc-body">
@@ -143,38 +156,86 @@
   .wrap {
     display: flex;
     flex-direction: column;
+    gap: 6px;
+    padding: 6px;
   }
   .acc {
-    border-bottom: 1px solid var(--border);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  .acc.open {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
   }
   .acc-head {
     width: 100%;
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: 10px;
     padding: 10px 12px;
-    background: transparent;
+    background: var(--bg-elev);
     border: none;
     border-radius: 0;
     color: var(--text);
-    font-weight: 500;
+    font-weight: 600;
+    font-size: 13px;
+    text-align: left;
     cursor: pointer;
+    letter-spacing: 0.2px;
   }
   .acc-head:hover {
-    background: var(--bg-elev);
+    background: var(--bg-hover);
   }
-  .chev {
+  .acc.open .acc-head {
+    background: color-mix(in srgb, var(--accent) 18%, var(--bg-elev));
+    color: white;
+  }
+  .acc-title {
+    flex: 1;
+  }
+  .icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg);
     color: var(--text-dim);
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .acc.open .icon {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+  .status-tag {
     font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-dim);
+  }
+  .acc.open .status-tag {
+    color: white;
+    opacity: 0.85;
   }
   .acc-body {
-    padding: 10px 12px 14px;
+    padding: 12px;
     display: flex;
     flex-direction: column;
     gap: 10px;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
   }
   .acc-body.no-pad {
     padding: 0;
+    border-top: 1px solid var(--border);
   }
   label {
     display: flex;

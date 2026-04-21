@@ -139,6 +139,16 @@ export interface ProjectFetchResult {
   error: string | null;
 }
 
+export interface ProjectPageEvent {
+  source_id: string;
+  project: ProjectSummary;
+  fields: ProjectField[];
+  items: ProjectItem[];
+  is_first: boolean;
+  is_final: boolean;
+  error: string | null;
+}
+
 export interface SourceResult {
   source_id: string;
   issues: Issue[];
@@ -188,6 +198,8 @@ export const api = {
   listProjects: () => invoke<ProjectSummary[]>("list_projects"),
   fetchAllProjects: () =>
     invoke<ProjectFetchResult[]>("fetch_all_projects"),
+  fetchAllProjectsStreaming: () =>
+    invoke<void>("fetch_all_projects_streaming"),
   setProjectItemStatus: (
     project_id: string,
     item_id: string,
@@ -206,11 +218,15 @@ export const api = {
     repo: string,
     project_id: string,
     input: NewIssueInput,
+    status_field_id?: string,
+    status_option_id?: string,
   ) =>
-    invoke<Issue>("create_issue_in_project", {
+    invoke<{ issue: Issue; item_id: string }>("create_issue_in_project", {
       repo,
       projectId: project_id,
       input,
+      statusFieldId: status_field_id ?? null,
+      statusOptionId: status_option_id ?? null,
     }),
   autostartStatus: () => invoke<boolean>("autostart_status"),
 };

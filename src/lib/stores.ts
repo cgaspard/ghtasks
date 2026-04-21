@@ -6,6 +6,11 @@ import type {
   Source,
   SourceResult,
 } from "./api";
+import {
+  persistent,
+  stringSetCodec,
+  nullableStringSetCodec,
+} from "./persistentStore";
 
 export const auth = writable<AuthStatus>({
   authenticated: false,
@@ -18,19 +23,61 @@ export const sourceResults = writable<SourceResult[]>([]);
 
 export const projectResults = writable<ProjectFetchResult[]>([]);
 
-export const selectedSourceIds = writable<Set<string>>(new Set());
+/** Source chips selected on the Issues tab. Persisted. */
+export const selectedSourceIds = persistent<Set<string>>(
+  "selectedSourceIds",
+  new Set(),
+  stringSetCodec,
+);
 
-/** Selected project-source ids on the Projects tab (separate filter state). */
-export const selectedProjectSourceIds = writable<Set<string>>(new Set());
+/** Source chips selected on the Projects tab. Persisted. */
+export const selectedProjectSourceIds = persistent<Set<string>>(
+  "selectedProjectSourceIds",
+  new Set(),
+  stringSetCodec,
+);
 
-/** Status filter for Projects tab. `null` = all, "" = "No Status". */
-export const selectedStatusFilters = writable<Set<string | null>>(new Set());
+/** Status filter for Projects tab. `null` = "No Status". Empty set = all. Persisted. */
+export const selectedStatusFilters = persistent<Set<string | null>>(
+  "selectedStatusFilters",
+  new Set(),
+  nullableStringSetCodec,
+);
 
-/** Custom single-select field filter: which field id (or null for none), and which option ids are selected. */
-export const customFieldFilter = writable<{
+/** Custom single-select field filter. Persisted. */
+export const customFieldFilter = persistent<{
   fieldId: string | null;
   selected: Set<string>;
-}>({ fieldId: null, selected: new Set() });
+}>(
+  "customFieldFilter",
+  { fieldId: null, selected: new Set() },
+  {
+    serialize: (v) =>
+      JSON.stringify({ fieldId: v.fieldId, selected: [...v.selected] }),
+    deserialize: (raw) => {
+      try {
+        const parsed = JSON.parse(raw);
+        return {
+          fieldId: typeof parsed.fieldId === "string" ? parsed.fieldId : null,
+          selected: Array.isArray(parsed.selected)
+            ? new Set(parsed.selected)
+            : new Set(),
+        };
+      } catch {
+        return { fieldId: null, selected: new Set() };
+      }
+    },
+  },
+);
+
+/** "Mine only" toggle on Projects tab. Persisted. Default: on. */
+export const projectsOnlyMine = persistent<boolean>(
+  "projectsOnlyMine",
+  true,
+);
+
+/** "Mine only" toggle on Issues tab. Persisted. Default: on. */
+export const issuesOnlyMine = persistent<boolean>("issuesOnlyMine", true);
 
 export const loading = writable(false);
 
@@ -42,15 +89,18 @@ export const newSinceLastSync = writable<number>(0);
 
 export const lastError = writable<string | null>(null);
 
-export const activeTab = writable<"projects" | "issues" | "settings">(
+/** Last viewed tab. Persisted. */
+export const activeTab = persistent<"projects" | "issues" | "settings">(
+  "activeTab",
   "projects",
 );
 
 /** When true, the New Issue modal is open. */
 export const showNewIssue = writable(false);
 
-/** Which Settings accordion section is expanded (one at a time). */
-export const settingsSection = writable<"general" | "sources" | "about">(
+/** Which Settings accordion section is expanded (one at a time). Persisted. */
+export const settingsSection = persistent<"general" | "sources" | "about">(
+  "settingsSection",
   "general",
 );
 

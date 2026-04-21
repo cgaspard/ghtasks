@@ -10,6 +10,10 @@
     newSinceLastSync,
   } from "../stores";
 
+  async function quit() {
+    await api.quit();
+  }
+
   interface Props {
     onRefresh: () => Promise<void> | void;
   }
@@ -91,8 +95,35 @@
     </button>
     {#if $auth.user}
       <img class="avatar" src={$auth.user.avatar_url} alt={$auth.user.login} />
-      <button class="ghost small" onclick={logout} title="Log out">×</button>
+      <button
+        class="ghost icon"
+        onclick={logout}
+        title="Sign out — {$auth.user.login}"
+        aria-label="Sign out"
+      >
+        <!-- door-arrow (logout) -->
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+          <path
+            fill="currentColor"
+            d="M6.25 2.75A1.75 1.75 0 0 1 8 1h3.5A2.75 2.75 0 0 1 14.25 3.75v8.5A2.75 2.75 0 0 1 11.5 15H8a1.75 1.75 0 0 1-1.75-1.75V12h1.5v1.25c0 .138.112.25.25.25h3.5a1.25 1.25 0 0 0 1.25-1.25v-8.5A1.25 1.25 0 0 0 11.5 2.5H8a.25.25 0 0 0-.25.25V4h-1.5V2.75ZM9.78 7.47 7.53 5.22l-1.06 1.06.97.97H2v1.5h5.44l-.97.97 1.06 1.06L9.78 8.53a.75.75 0 0 0 0-1.06Z"
+          />
+        </svg>
+      </button>
     {/if}
+    <button
+      class="ghost icon"
+      onclick={quit}
+      title="Quit GH Tasks (⌘Q)"
+      aria-label="Quit"
+    >
+      <!-- power (quit) -->
+      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+        <path
+          fill="currentColor"
+          d="M8 0a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0V.75A.75.75 0 0 1 8 0Zm-4.41 3.24a.75.75 0 1 1 .944 1.166 5.5 5.5 0 1 0 6.932 0 .75.75 0 0 1 .944-1.166 7 7 0 1 1-8.82 0Z"
+        />
+      </svg>
+    </button>
   </div>
 </header>
 
@@ -138,9 +169,17 @@
   }
   .icon {
     width: 28px;
-    padding: 4px 0;
+    height: 24px;
+    padding: 0;
     text-align: center;
     position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+  }
+  .icon:hover {
+    color: var(--text);
   }
   .sync-label {
     font-size: 10px;
@@ -183,10 +222,5 @@
     to {
       transform: rotate(360deg);
     }
-  }
-  .small {
-    padding: 2px 6px;
-    font-size: 14px;
-    line-height: 1;
   }
 </style>

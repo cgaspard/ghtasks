@@ -119,6 +119,7 @@ pub fn run() {
             commands::set_auto_hide,
             commands::list_projects,
             commands::fetch_all_projects,
+            commands::fetch_all_projects_streaming,
             commands::set_project_item_status,
             commands::add_issue_comment,
             commands::create_issue_in_project,
