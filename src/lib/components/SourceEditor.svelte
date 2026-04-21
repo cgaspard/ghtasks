@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api, type ProjectSummary, type Repo, type Source } from "../api";
   import { sources, projectResults, sourceResults, lastError } from "../stores";
+  import Select from "./Select.svelte";
 
   interface Props {
     onChanged: () => Promise<void> | void;
@@ -249,20 +250,16 @@
       {#if editing.kind === "project"}
         <label>
           Project
-          <select
+          <Select
             value={editing.project_id}
-            onchange={(e) =>
-              onProjectPicked((e.target as HTMLSelectElement).value)}
-          >
-            <option value="" disabled>
-              {loadingProjects ? "Loading…" : "Pick a project"}
-            </option>
-            {#each projects as p (p.id)}
-              <option value={p.id}>
-                {p.owner_login}/#{p.number} · {p.title}
-              </option>
-            {/each}
-          </select>
+            placeholder={loadingProjects ? "Loading…" : "Pick a project"}
+            options={projects.map((p) => ({
+              value: p.id,
+              label: `${p.owner_login}/#${p.number} · ${p.title}`,
+              sublabel: p.url,
+            }))}
+            onChange={(v) => onProjectPicked(v ?? "")}
+          />
         </label>
 
         <label>
@@ -298,31 +295,32 @@
 
         <label>
           Repository
-          <select bind:value={editing.repo}>
-            <option value="" disabled>
-              {loadingRepos ? "Loading…" : "Pick a repository"}
-            </option>
-            {#each repos as r}
-              <option value={r.full_name}
-                >{r.full_name}{r.private ? " 🔒" : ""}</option
-              >
-            {/each}
-          </select>
+          <Select
+            value={editing.repo}
+            placeholder={loadingRepos ? "Loading…" : "Pick a repository"}
+            options={repos.map((r) => ({
+              value: r.full_name,
+              label: r.private ? `${r.full_name} 🔒` : r.full_name,
+              sublabel: r.description ?? undefined,
+            }))}
+            onChange={(v) => {
+              if (editing && editing.kind === "repo") editing.repo = v ?? "";
+            }}
+          />
         </label>
 
         <label>
           Preset
-          <select
-            onchange={(e) =>
-              editing && editing.kind === "repo"
-                ? (editing.query = (e.target as HTMLSelectElement).value)
-                : undefined}
-          >
-            <option disabled selected>Choose a preset…</option>
-            {#each PRESETS as p}
-              <option value={p.q}>{p.label}</option>
-            {/each}
-          </select>
+          <Select
+            value={editing.query}
+            placeholder="Choose a preset…"
+            options={PRESETS.map((p) => ({ value: p.q, label: p.label, sublabel: p.q }))}
+            onChange={(v) => {
+              if (editing && editing.kind === "repo" && typeof v === "string") {
+                editing.query = v;
+              }
+            }}
+          />
         </label>
 
         <label>

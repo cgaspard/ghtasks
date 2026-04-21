@@ -3,6 +3,7 @@
   import { api, type Repo, type Settings as SettingsT } from "../api";
   import { lastError, settingsSection } from "../stores";
   import SourceEditor from "./SourceEditor.svelte";
+  import Select from "./Select.svelte";
 
   interface Props {
     onSourcesChanged: () => Promise<void> | void;
@@ -86,23 +87,36 @@
       <div class="acc-body">
         <label>
           Default repo for new issues
-          <select bind:value={settings.default_repo} onchange={save}>
-            <option value={null}>(none)</option>
-            {#each repos as r}
-              <option value={r.full_name}>{r.full_name}</option>
-            {/each}
-          </select>
+          <Select
+            value={settings.default_repo}
+            placeholder="(none)"
+            options={[
+              { value: null, label: "(none)" },
+              ...repos.map((r) => ({ value: r.full_name, label: r.full_name })),
+            ]}
+            onChange={(v) => {
+              settings.default_repo = v as string | null;
+              save();
+            }}
+          />
         </label>
 
         <label>
           Window size
-          <select bind:value={settings.window_size} onchange={save}>
-            <option value="compact">Compact (340 × 480)</option>
-            <option value="default">Standard (380 × 560)</option>
-            <option value="tall">Tall (380 × 760)</option>
-            <option value="wide">Wide (480 × 560)</option>
-            <option value="large">Large (480 × 760)</option>
-          </select>
+          <Select
+            value={settings.window_size}
+            options={[
+              { value: "compact", label: "Compact (340 × 480)" },
+              { value: "default", label: "Standard (380 × 560)" },
+              { value: "tall", label: "Tall (380 × 760)" },
+              { value: "wide", label: "Wide (480 × 560)" },
+              { value: "large", label: "Large (480 × 760)" },
+            ]}
+            onChange={(v) => {
+              settings.window_size = v as typeof settings.window_size;
+              save();
+            }}
+          />
         </label>
 
         <label>

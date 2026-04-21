@@ -10,23 +10,57 @@
     newSinceLastSync,
   } from "../stores";
 
-  async function quit() {
-    await api.quit();
-  }
-
   interface Props {
     onRefresh: () => Promise<void> | void;
   }
   let { onRefresh }: Props = $props();
 
+  async function quit() {
+    await api.quit();
+  }
+  async function logout() {
+    menuOpen = false;
+    await api.authLogout();
+    $auth = { authenticated: false, user: null };
+  }
+  function openSettings() {
+    menuOpen = false;
+    $activeTab = "settings";
+  }
+
   // Tick the "synced Xm ago" label every 20s so it stays fresh without
   // reading Date.now() in the template.
   let now = $state(Date.now());
   let tickHandle: ReturnType<typeof setInterval> | null = null;
+
+  // Avatar popover open state.
+  let menuOpen = $state(false);
+  let menuRoot: HTMLDivElement | undefined = $state();
+
+  function onDocClick(e: MouseEvent) {
+    if (!menuOpen) return;
+    if (menuRoot && !menuRoot.contains(e.target as Node)) menuOpen = false;
+  }
+  function onKey(e: KeyboardEvent) {
+    if (e.key === "Escape" && menuOpen) {
+      menuOpen = false;
+      return;
+    }
+    // ⌘, / Ctrl+, → Settings
+    if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+      e.preventDefault();
+      $activeTab = "settings";
+    }
+  }
+
   onMount(() => {
     tickHandle = setInterval(() => (now = Date.now()), 20_000);
+    document.addEventListener("click", onDocClick);
+    document.addEventListener("keydown", onKey);
     return () => {
       if (tickHandle) clearInterval(tickHandle);
+      document.removeEventListener("click", onDocClick);
+      document.removeEventListener("keydown", onKey);
     };
   });
 
@@ -46,11 +80,6 @@
     $newSinceLastSync = 0;
     await onRefresh();
   }
-
-  async function logout() {
-    await api.authLogout();
-    $auth = { authenticated: false, user: null };
-  }
 </script>
 
 <header class="bar" data-tauri-drag-region>
@@ -63,10 +92,6 @@
       class:active={$activeTab === "issues"}
       onclick={() => ($activeTab = "issues")}>Issues</button
     >
-    <button
-      class:active={$activeTab === "settings"}
-      onclick={() => ($activeTab = "settings")}>Settings</button
-    >
   </nav>
   <div class="right">
     {#if agoLabel}
@@ -75,7 +100,8 @@
     <button
       class="ghost icon"
       onclick={() => ($showNewIssue = true)}
-      title="New issue">+</button
+      title="New issue"
+      aria-label="New issue">+</button
     >
     <button
       class="ghost icon refresh"
@@ -87,43 +113,82 @@
         : $newSinceLastSync > 0
           ? `${$newSinceLastSync} new since last view — click to refresh`
           : "Refresh"}
+      aria-label="Refresh"
     >
       <span class="spin-wrap" aria-hidden="true">↻</span>
       {#if $newSinceLastSync > 0 && !$loading}
         <span class="new-badge" aria-label="New items">{$newSinceLastSync}</span>
       {/if}
     </button>
+
     {#if $auth.user}
-      <img class="avatar" src={$auth.user.avatar_url} alt={$auth.user.login} />
-      <button
-        class="ghost icon"
-        onclick={logout}
-        title="Sign out — {$auth.user.login}"
-        aria-label="Sign out"
-      >
-        <!-- door-arrow (logout) -->
-        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-          <path
-            fill="currentColor"
-            d="M6.25 2.75A1.75 1.75 0 0 1 8 1h3.5A2.75 2.75 0 0 1 14.25 3.75v8.5A2.75 2.75 0 0 1 11.5 15H8a1.75 1.75 0 0 1-1.75-1.75V12h1.5v1.25c0 .138.112.25.25.25h3.5a1.25 1.25 0 0 0 1.25-1.25v-8.5A1.25 1.25 0 0 0 11.5 2.5H8a.25.25 0 0 0-.25.25V4h-1.5V2.75ZM9.78 7.47 7.53 5.22l-1.06 1.06.97.97H2v1.5h5.44l-.97.97 1.06 1.06L9.78 8.53a.75.75 0 0 0 0-1.06Z"
+      <div class="menu-anchor" bind:this={menuRoot}>
+        <button
+          class="avatar-btn"
+          class:active={menuOpen}
+          onclick={() => (menuOpen = !menuOpen)}
+          title={$auth.user.login}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+        >
+          <img
+            class="avatar"
+            src={$auth.user.avatar_url}
+            alt={$auth.user.login}
           />
-        </svg>
-      </button>
+        </button>
+
+        {#if menuOpen}
+          <div class="menu" role="menu">
+            <div class="menu-user">
+              <img
+                class="avatar lg"
+                src={$auth.user.avatar_url}
+                alt={$auth.user.login}
+              />
+              <div class="menu-user-text">
+                <div class="menu-user-name">{$auth.user.name ?? $auth.user.login}</div>
+                <div class="menu-user-login muted">@{$auth.user.login}</div>
+              </div>
+            </div>
+            <div class="menu-sep"></div>
+            <button class="menu-item" onclick={openSettings} role="menuitem">
+              <!-- gear -->
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M8 0a8.2 8.2 0 0 1 .701.031C9.444.095 9.99.645 10.16 1.29l.288 1.107c.18.695.759 1.21 1.473 1.388l1.117.277c.658.164 1.201.71 1.263 1.452.03.344.04.69.023 1.038a5.91 5.91 0 0 1-.215 1.17c-.145.597-.518 1.14-1.083 1.361l-1.064.417c-.68.266-1.153.926-1.153 1.66 0 .735.473 1.395 1.153 1.661l1.064.417c.565.22.938.765 1.083 1.361.117.49.186.988.215 1.488.017.347.007.693-.023 1.038-.062.741-.605 1.288-1.263 1.452l-1.117.277c-.714.178-1.294.693-1.473 1.388l-.288 1.107c-.17.645-.716 1.195-1.459 1.259a8.2 8.2 0 0 1-1.402 0c-.743-.064-1.29-.614-1.46-1.259l-.287-1.107c-.18-.695-.76-1.21-1.473-1.388l-1.117-.277C1.658 13.705 1.116 13.16 1.054 12.419a8.27 8.27 0 0 1-.023-1.038c.029-.5.098-.998.215-1.488.145-.596.518-1.14 1.083-1.36l1.064-.418c.68-.266 1.153-.926 1.153-1.66 0-.734-.473-1.394-1.153-1.66l-1.064-.417c-.565-.221-.938-.765-1.083-1.361A8.198 8.198 0 0 1 1.031 5.55a5.91 5.91 0 0 1 .023-1.037c.062-.742.604-1.289 1.263-1.453l1.117-.277c.714-.178 1.293-.693 1.473-1.388L5.194 1.29c.17-.645.716-1.195 1.46-1.259A8.2 8.2 0 0 1 8 0Zm0 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"
+                />
+              </svg>
+              <span>Settings</span>
+              <span class="menu-kbd">⌘,</span>
+            </button>
+            <button class="menu-item" onclick={logout} role="menuitem">
+              <!-- sign out -->
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M6.25 2.75A1.75 1.75 0 0 1 8 1h3.5A2.75 2.75 0 0 1 14.25 3.75v8.5A2.75 2.75 0 0 1 11.5 15H8a1.75 1.75 0 0 1-1.75-1.75V12h1.5v1.25c0 .138.112.25.25.25h3.5a1.25 1.25 0 0 0 1.25-1.25v-8.5A1.25 1.25 0 0 0 11.5 2.5H8a.25.25 0 0 0-.25.25V4h-1.5V2.75ZM9.78 7.47 7.53 5.22l-1.06 1.06.97.97H2v1.5h5.44l-.97.97 1.06 1.06L9.78 8.53a.75.75 0 0 0 0-1.06Z"
+                />
+              </svg>
+              <span>Sign out</span>
+            </button>
+            <div class="menu-sep"></div>
+            <button class="menu-item danger" onclick={quit} role="menuitem">
+              <!-- power -->
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M8 0a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0V.75A.75.75 0 0 1 8 0Zm-4.41 3.24a.75.75 0 1 1 .944 1.166 5.5 5.5 0 1 0 6.932 0 .75.75 0 0 1 .944-1.166 7 7 0 1 1-8.82 0Z"
+                />
+              </svg>
+              <span>Quit GH Tasks</span>
+              <span class="menu-kbd">⌘Q</span>
+            </button>
+          </div>
+        {/if}
+      </div>
     {/if}
-    <button
-      class="ghost icon"
-      onclick={quit}
-      title="Quit GH Tasks (⌘Q)"
-      aria-label="Quit"
-    >
-      <!-- power (quit) -->
-      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-        <path
-          fill="currentColor"
-          d="M8 0a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0V.75A.75.75 0 0 1 8 0Zm-4.41 3.24a.75.75 0 1 1 .944 1.166 5.5 5.5 0 1 0 6.932 0 .75.75 0 0 1 .944-1.166 7 7 0 1 1-8.82 0Z"
-        />
-      </svg>
-    </button>
   </div>
 </header>
 
@@ -166,6 +231,101 @@
     height: 22px;
     border-radius: 50%;
     border: 1px solid var(--border);
+    display: block;
+  }
+  .avatar.lg {
+    width: 28px;
+    height: 28px;
+  }
+  .menu-anchor {
+    position: relative;
+  }
+  .avatar-btn {
+    all: unset;
+    cursor: pointer;
+    border-radius: 50%;
+    padding: 0;
+    line-height: 0;
+    transition: box-shadow 0.12s;
+  }
+  .avatar-btn:hover {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  .avatar-btn.active {
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  .menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 220px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+    z-index: 60;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .menu-user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+  }
+  .menu-user-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .menu-user-name {
+    font-weight: 500;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .menu-user-login {
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .menu-sep {
+    height: 1px;
+    background: var(--border);
+    margin: 2px 0;
+  }
+  .menu-item {
+    all: unset;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text);
+  }
+  .menu-item:hover {
+    background: var(--bg-hover);
+  }
+  .menu-item.danger:hover {
+    background: color-mix(in srgb, var(--danger) 22%, transparent);
+    color: var(--text);
+  }
+  .menu-item > span:nth-of-type(1) {
+    flex: 1;
+  }
+  .menu-kbd {
+    font-size: 10px;
+    color: var(--text-dim);
+    padding: 1px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
   .icon {
     width: 28px;

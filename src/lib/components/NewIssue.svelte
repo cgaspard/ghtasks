@@ -17,6 +17,7 @@
   } from "../stores";
   import FilterPicker from "./FilterPicker.svelte";
   import StatusPicker from "./StatusPicker.svelte";
+  import Select from "./Select.svelte";
 
   interface Props {
     onCreated: () => Promise<void> | void;
@@ -324,12 +325,16 @@
       {#if target === "project"}
         <label>
           Project
-          <select bind:value={projectSourceId} required>
-            <option value="" disabled>Pick a project</option>
-            {#each projectSources as s (s.id)}
-              <option value={s.id}>{s.name}</option>
-            {/each}
-          </select>
+          <Select
+            value={projectSourceId}
+            placeholder="Pick a project"
+            options={projectSources.map((s) => ({
+              value: s.id,
+              label: s.name,
+              color: s.color ?? undefined,
+            }))}
+            onChange={(v) => (projectSourceId = (v as string) ?? "")}
+          />
         </label>
 
         {#if statusField}
@@ -360,18 +365,17 @@
 
       <label>
         Repository
-        <select bind:value={repo} required>
-          <option value="" disabled>
-            {loadingRepos ? "Loading…" : "Pick a repository"}
-          </option>
-          {#each repos as r}
-            {#if !r.archived}
-              <option value={r.full_name}
-                >{r.full_name}{r.private ? " 🔒" : ""}</option
-              >
-            {/if}
-          {/each}
-        </select>
+        <Select
+          value={repo}
+          placeholder={loadingRepos ? "Loading…" : "Pick a repository"}
+          options={repos
+            .filter((r) => !r.archived)
+            .map((r) => ({
+              value: r.full_name,
+              label: r.private ? `${r.full_name} 🔒` : r.full_name,
+            }))}
+          onChange={(v) => (repo = (v as string) ?? "")}
+        />
       </label>
 
       <label>
@@ -412,12 +416,18 @@
         </label>
         <label>
           Type
-          <select bind:value={issueType}>
-            <option value="">(none)</option>
-            <option value="Task">Task</option>
-            <option value="Bug">Bug</option>
-            <option value="Feature">Feature</option>
-          </select>
+          <Select
+            value={issueType}
+            placeholder="(none)"
+            minWidth={120}
+            options={[
+              { value: "", label: "(none)" },
+              { value: "Task", label: "Task" },
+              { value: "Bug", label: "Bug" },
+              { value: "Feature", label: "Feature" },
+            ]}
+            onChange={(v) => (issueType = (v as string) ?? "")}
+          />
         </label>
       </div>
 

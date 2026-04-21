@@ -22,6 +22,7 @@
   } from "../stores";
   import FilterPicker from "./FilterPicker.svelte";
   import StatusPicker from "./StatusPicker.svelte";
+  import Select from "./Select.svelte";
   import { statusColor } from "../statusColor";
 
   const NO_STATUS = "__none__";
@@ -430,16 +431,19 @@
 
       {#if customFilterableFields.length > 0}
         <label class="fld">
-          <select
+          <Select
             value={$customFieldFilter.fieldId ?? ""}
-            onchange={(e) =>
-              pickCustomField((e.target as HTMLSelectElement).value || null)}
-          >
-            <option value="">Filter by…</option>
-            {#each customFilterableFields as f (f.id)}
-              <option value={f.id}>{f.name}</option>
-            {/each}
-          </select>
+            placeholder="Filter by…"
+            minWidth={130}
+            options={[
+              { value: "", label: "Filter by…" },
+              ...customFilterableFields.map((f) => ({
+                value: f.id,
+                label: f.name,
+              })),
+            ]}
+            onChange={(v) => pickCustomField(((v as string) || "") || null)}
+          />
         </label>
 
         {#if $customFieldFilter.fieldId}
@@ -639,12 +643,6 @@
     align-items: center;
     font-size: 11px;
     color: var(--text-dim);
-  }
-  .fld select {
-    width: auto;
-    padding: 3px 6px;
-    font-size: 11px;
-    border-radius: 999px;
   }
   .empty {
     padding: 24px;
