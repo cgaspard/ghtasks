@@ -1,9 +1,12 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { openUrl } from "@tauri-apps/plugin-opener";
   import { api, type Repo, type Settings as SettingsT } from "../api";
-  import { lastError, settingsSection } from "../stores";
+  import { lastError, settingsSection, appVersion } from "../stores";
   import SourceEditor from "./SourceEditor.svelte";
   import Select from "./Select.svelte";
+
+  const REPO_URL = "https://github.com/cgaspard/ghtasks";
 
   interface Props {
     onSourcesChanged: () => Promise<void> | void;
@@ -156,11 +159,33 @@
       >
     </button>
     {#if $settingsSection === "about"}
-      <div class="acc-body">
+      <div class="acc-body about">
+        <div class="about-title">
+          GH Tasks <span class="about-ver">v{$appVersion ?? "…"}</span>
+        </div>
         <p class="muted small">
-          GH Tasks v0.1.0 · backed by GitHub Issues + Projects · your data
-          stays with GitHub.
+          Backed by GitHub Issues + Projects. Your data stays with GitHub —
+          no backend, no telemetry.
         </p>
+        <div class="about-links">
+          <button class="linklike" onclick={() => openUrl(REPO_URL)}>
+            GitHub repository ↗
+          </button>
+          <button
+            class="linklike"
+            onclick={() =>
+              openUrl(`${REPO_URL}/releases/tag/v${$appVersion ?? ""}`)}
+            disabled={!$appVersion}
+          >
+            Release notes ↗
+          </button>
+          <button
+            class="linklike"
+            onclick={() => openUrl(`${REPO_URL}/issues/new`)}
+          >
+            Report an issue ↗
+          </button>
+        </div>
       </div>
     {/if}
   </section>
@@ -270,5 +295,40 @@
   .saved {
     color: var(--ok);
     font-size: 12px;
+  }
+  .about-title {
+    color: var(--text);
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .about-ver {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    font-weight: 500;
+    margin-left: 4px;
+  }
+  .about-links {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 4px;
+  }
+  .linklike {
+    all: unset;
+    cursor: pointer;
+    color: var(--accent);
+    font-size: 12px;
+    width: fit-content;
+  }
+  .linklike:hover {
+    text-decoration: underline;
+  }
+  .linklike:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .linklike:disabled:hover {
+    text-decoration: none;
   }
 </style>

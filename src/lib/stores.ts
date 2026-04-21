@@ -200,6 +200,11 @@ export const settingsSection = persistent<"general" | "sources" | "about">(
  * mount, then clears this. */
 export const settingsFocus = writable<"new-project" | "new-repo" | null>(null);
 
+/** App version from the Tauri bundle (Info.plist on macOS, version resource
+ * on Windows, etc.) — the runtime-authoritative version. Set once on
+ * startup; null until resolved. */
+export const appVersion = writable<string | null>(null);
+
 /** Flat list of issues across enabled, selected sources, deduped by node_id. */
 export const visibleIssues = derived(
   [sourceResults, selectedSourceIds],

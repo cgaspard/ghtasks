@@ -8,6 +8,8 @@
     showNewIssue,
     lastSyncAt,
     newSinceLastSync,
+    settingsSection,
+    appVersion,
   } from "../stores";
 
   interface Props {
@@ -30,6 +32,11 @@
   async function openDevtools() {
     menuOpen = false;
     await api.openDevtools();
+  }
+  function openAbout() {
+    menuOpen = false;
+    $settingsSection = "about";
+    $activeTab = "settings";
   }
 
   // Tick the "synced Xm ago" label every 20s so it stays fresh without
@@ -199,6 +206,15 @@
               <span>Quit GH Tasks</span>
               <span class="menu-kbd">⌘Q</span>
             </button>
+            <div class="menu-sep"></div>
+            <button
+              class="menu-version"
+              onclick={openAbout}
+              role="menuitem"
+              title="About GH Tasks"
+            >
+              v{$appVersion ?? "…"}
+            </button>
           </div>
         {/if}
       </div>
@@ -340,6 +356,22 @@
     border: 1px solid var(--border);
     border-radius: 4px;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .menu-version {
+    all: unset;
+    cursor: pointer;
+    display: block;
+    padding: 4px 8px;
+    font-size: 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--text-dim);
+    text-align: center;
+    border-radius: 6px;
+    letter-spacing: 0.3px;
+  }
+  .menu-version:hover {
+    background: var(--bg-hover);
+    color: var(--text);
   }
   .icon {
     width: 28px;

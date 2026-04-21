@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+  import { getVersion } from "@tauri-apps/api/app";
   import { api, type ProjectPageEvent } from "./lib/api";
   import {
     auth,
@@ -16,6 +17,7 @@
     newSinceLastSync,
     recentlyCreated,
     pruneRecentlyCreated,
+    appVersion,
   } from "./lib/stores";
   import { get } from "svelte/store";
   import Login from "./lib/components/Login.svelte";
@@ -265,6 +267,8 @@
     }).then((fn) => {
       unlistenProjectPage = fn;
     });
+
+    void getVersion().then((v) => ($appVersion = v));
 
     void refreshAuth();
     // Poll every 90s while authenticated.
