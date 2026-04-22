@@ -190,7 +190,7 @@ export const activeTab = persistent<"projects" | "issues" | "settings">(
 export const showNewIssue = writable(false);
 
 /** Which Settings accordion section is expanded (one at a time). Persisted. */
-export const settingsSection = persistent<"general" | "sources" | "about">(
+export const settingsSection = persistent<"general" | "sources">(
   "settingsSection",
   "general",
 );
@@ -205,15 +205,22 @@ export const settingsFocus = writable<"new-project" | "new-repo" | null>(null);
  * startup; null until resolved. */
 export const appVersion = writable<string | null>(null);
 
-/** Navigation stack. `list` is the default view; `detail` shows a single
- * issue's full body + comments, sliding in from the right. One level
- * deep by design — drilling into cross-linked issues opens github.com
- * rather than pushing another frame. */
+/** Navigation stack. `list` is the default view; other variants slide
+ * in from the right. One level deep by design — no nested pushes. */
 export type AppView =
   | { kind: "list" }
-  | { kind: "detail"; repo: string; number: number; nodeId: string };
+  | { kind: "detail"; repo: string; number: number; nodeId: string }
+  | { kind: "about" };
 
 export const appView = writable<AppView>({ kind: "list" });
+
+/** Set when a background update check has found a newer version. Drives
+ * the orange badge on the avatar + the "Update available" menu row.
+ * Cleared when the user opens About and the check runs fresh. */
+export const updateAvailable = writable<{
+  version: string;
+  body: string | null;
+} | null>(null);
 
 /** Flat list of issues across enabled, selected sources, deduped by node_id. */
 export const visibleIssues = derived(

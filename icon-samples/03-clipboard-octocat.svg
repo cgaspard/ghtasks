@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Candidate 3: Clipboard with a check + a small octocat hint.
+       The silhouette in the corner is a generic "cat face"
+       silhouette (not the real Octocat), to stay trademark-safe
+       while still hinting GitHub. -->
+  <defs>
+    <linearGradient id="bg3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1f2638"/>
+      <stop offset="1" stop-color="#141826"/>
+    </linearGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="180" ry="180" fill="url(#bg3)"/>
+  <rect x="64" y="64" width="896" height="896" rx="180" ry="180" fill="none" stroke="#2a3044" stroke-width="2"/>
+
+  <!-- Clipboard body -->
+  <rect x="262" y="264" width="500" height="612" rx="44" ry="44" fill="#eef1f6"/>
+  <!-- Clipboard clip -->
+  <rect x="398" y="208" width="228" height="110" rx="28" ry="28" fill="#9aa0b4"/>
+  <rect x="438" y="228" width="148" height="60" rx="12" ry="12" fill="#4a5265"/>
+
+  <!-- Task line 1: checked -->
+  <circle cx="354" cy="448" r="32" fill="#30a46c"/>
+  <path d="M 338 448 L 350 460 L 374 434" stroke="white" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <rect x="414" y="432" width="280" height="32" rx="16" fill="#2b3346"/>
+
+  <!-- Task line 2 -->
+  <circle cx="354" cy="568" r="32" fill="none" stroke="#b9bfcc" stroke-width="8"/>
+  <rect x="414" y="552" width="300" height="32" rx="16" fill="#d4d9e3"/>
+
+  <!-- Task line 3 -->
+  <circle cx="354" cy="688" r="32" fill="none" stroke="#b9bfcc" stroke-width="8"/>
+  <rect x="414" y="672" width="240" height="32" rx="16" fill="#d4d9e3"/>
+
+  <!-- Corner cat-face silhouette (generic, not GitHub's Octocat) -->
+  <g transform="translate(688 688)" fill="#4f8cff">
+    <circle cx="0" cy="0" r="104"/>
+    <!-- Ears -->
+    <path d="M -72 -80 L -54 -20 L -24 -62 Z"/>
+    <path d="M 72 -80 L 54 -20 L 24 -62 Z"/>
+    <!-- Eyes (knocked out) -->
+    <circle cx="-30" cy="-10" r="12" fill="#141826"/>
+    <circle cx="30" cy="-10" r="12" fill="#141826"/>
+  </g>
+</svg>

@@ -642,6 +642,60 @@ pub struct IssueDetail {
     pub comments: Vec<IssueComment>,
 }
 
+// ------------------------- Auto-update -------------------------------
+
+#[derive(Debug, Serialize)]
+pub struct UpdateCheckResult {
+    pub available: bool,
+    pub version: Option<String>,
+    pub body: Option<String>,
+}
+
+/// Query the configured update endpoint. Returns whether a newer
+/// version exists and its release-notes body.
+#[tauri::command]
+pub async fn check_for_updates(app: AppHandle) -> Result<UpdateCheckResult> {
+    use tauri_plugin_updater::UpdaterExt;
+    let updater = app
+        .updater()
+        .map_err(|e| crate::error::Error::Other(format!("updater init: {e}")))?;
+    match updater.check().await {
+        Ok(Some(update)) => Ok(UpdateCheckResult {
+            available: true,
+            version: Some(update.version.clone()),
+            body: update.body.clone(),
+        }),
+        Ok(None) => Ok(UpdateCheckResult {
+            available: false,
+            version: None,
+            body: None,
+        }),
+        Err(e) => Err(crate::error::Error::Other(format!("check: {e}"))),
+    }
+}
+
+/// Download + install the available update and relaunch. Blocks until
+/// install completes; on macOS the app replaces its bundle in place
+/// then respawns.
+#[tauri::command]
+pub async fn install_update(app: AppHandle) -> Result<()> {
+    use tauri_plugin_updater::UpdaterExt;
+    let updater = app
+        .updater()
+        .map_err(|e| crate::error::Error::Other(format!("updater init: {e}")))?;
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| crate::error::Error::Other(format!("check: {e}")))?
+        .ok_or_else(|| crate::error::Error::Other("no update available".into()))?;
+    update
+        .download_and_install(|_chunk, _total| {}, || {})
+        .await
+        .map_err(|e| crate::error::Error::Other(format!("install: {e}")))?;
+    // Relaunch into the new bundle.
+    app.restart();
+}
+
 /// Fetch the full issue + every comment in one round-trip from the
 /// frontend. Body and comments run in parallel.
 #[tauri::command]

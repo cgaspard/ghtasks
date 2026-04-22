@@ -249,6 +249,12 @@ export interface IssueDetail {
   comments: IssueComment[];
 }
 
+export interface UpdateCheckResult {
+  available: boolean;
+  version: string | null;
+  body: string | null;
+}
+
 export interface Settings {
   default_repo: string | null;
   poll_interval_secs: number;
@@ -320,6 +326,8 @@ export const api = {
     invoke<IssueTemplateSet>("list_issue_templates", { repo }),
   getIssueDetail: (repo: string, number: number) =>
     invoke<IssueDetail>("get_issue_detail", { repo, number }),
+  checkForUpdates: () => invoke<UpdateCheckResult>("check_for_updates"),
+  installUpdate: () => invoke<void>("install_update"),
 };
 
 export function repoFullName(issue: Issue): string {

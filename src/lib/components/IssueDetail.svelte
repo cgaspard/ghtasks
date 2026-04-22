@@ -3,7 +3,7 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { api, type IssueDetail as IssueDetailT } from "../api";
   import { lastError } from "../stores";
-  import { renderMarkdown } from "../markdown";
+  import { renderMarkdown, isSafeExternalUrl } from "../markdown";
 
   interface Props {
     repo: string;
@@ -48,13 +48,20 @@
   }
 
   /** Intercept clicks on rendered-markdown links so they open in the
-   * system browser rather than navigating the webview away. */
+   * system browser rather than navigating the webview away. Also
+   * validates the URL scheme — a sanitized markdown body shouldn't
+   * contain dangerous schemes after DOMPurify, but belt-and-suspenders:
+   * explicitly refuse anything other than http/https/mailto. */
   function onBodyClick(e: MouseEvent) {
     const t = (e.target as HTMLElement | null)?.closest("a");
     if (!t) return;
     const href = t.getAttribute("href");
     if (!href) return;
     e.preventDefault();
+    if (!isSafeExternalUrl(href)) {
+      console.warn("[ghtasks] refused to open unsafe URL:", href);
+      return;
+    }
     void openUrl(href);
   }
 

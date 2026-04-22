@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Candidate 2: Git branch + check.
+       The branch reads "code repo", the checkmark on the top node
+       reads "done". Minimalist. No GitHub trademark. -->
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a1f2b"/>
+      <stop offset="1" stop-color="#0f1116"/>
+    </linearGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="180" ry="180" fill="url(#bg2)"/>
+  <rect x="64" y="64" width="896" height="896" rx="180" ry="180" fill="none" stroke="#2a3044" stroke-width="2"/>
+
+  <!-- Trunk line -->
+  <path d="M 360 256 L 360 768" stroke="#4f8cff" stroke-width="38" stroke-linecap="round"/>
+  <!-- Branch curve to right node -->
+  <path d="M 360 488 Q 360 364 664 364" stroke="#4f8cff" stroke-width="38" stroke-linecap="round" fill="none"/>
+
+  <!-- Bottom node -->
+  <circle cx="360" cy="768" r="58" fill="#4f8cff"/>
+  <!-- Middle node -->
+  <circle cx="360" cy="256" r="58" fill="#4f8cff"/>
+
+  <!-- Branch node (with checkmark) -->
+  <circle cx="664" cy="364" r="96" fill="#30a46c"/>
+  <path d="M 612 364 L 646 400 L 720 326" stroke="white" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

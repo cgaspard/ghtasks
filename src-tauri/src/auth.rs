@@ -122,8 +122,13 @@ pub async fn poll_for_token(
     log::debug!("device-flow poll status={status} body={}", redact_token(&raw));
 
     let body: TokenResponse = serde_json::from_str(&raw).map_err(|e| {
+        // Defense in depth: even though a parse failure on the
+        // device-flow response shouldn't contain a token (GitHub only
+        // returns access_token on valid 200 JSON), redact anyway
+        // before surfacing the raw body to the frontend.
         Error::Other(format!(
-            "device-flow: could not parse response (status {status}): {e}; body: {raw}"
+            "device-flow: could not parse response (status {status}): {e}; body: {}",
+            redact_token(&raw)
         ))
     })?;
     match body {

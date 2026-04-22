@@ -1,6 +1,6 @@
 [package]
 name = "ghtasks"
-version = "0.1.10"
+version = "0.1.11"
 description = "GitHub Tasks — menu bar issue dashboard"
 authors = ["ghtasks"]
 edition = "2021"
@@ -33,6 +33,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 serde_yaml = "0.9"
 base64 = "0.22"
+tauri-plugin-updater = "2"
 
 [features]
 default = []

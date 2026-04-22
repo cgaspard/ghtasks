@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Candidate 1: Checklist tile.
+       Flat, three task rows, the top one checked in green.
+       Reads as "task list" at a glance; trademark-safe. -->
+  <defs>
+    <linearGradient id="bg1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a1f2b"/>
+      <stop offset="1" stop-color="#0f1116"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded-square tile -->
+  <rect x="64" y="64" width="896" height="896" rx="180" ry="180" fill="url(#bg1)"/>
+  <!-- Accent edge highlight -->
+  <rect x="64" y="64" width="896" height="896" rx="180" ry="180" fill="none" stroke="#2a3044" stroke-width="2"/>
+
+  <!-- Three task rows, top one checked -->
+  <!-- Row 1: checked -->
+  <circle cx="260" cy="380" r="62" fill="#30a46c"/>
+  <path d="M 226 380 L 252 406 L 302 356" stroke="#0f1116" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <rect x="360" y="358" width="400" height="44" rx="22" fill="#4f8cff" opacity="0.95"/>
+
+  <!-- Row 2: unchecked -->
+  <circle cx="260" cy="520" r="62" fill="none" stroke="#4a5265" stroke-width="12"/>
+  <rect x="360" y="498" width="440" height="44" rx="22" fill="#2a3044"/>
+
+  <!-- Row 3: unchecked, shorter -->
+  <circle cx="260" cy="660" r="62" fill="none" stroke="#4a5265" stroke-width="12"/>
+  <rect x="360" y="638" width="320" height="44" rx="22" fill="#2a3044"/>
+</svg>

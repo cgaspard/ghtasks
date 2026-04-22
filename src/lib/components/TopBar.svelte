@@ -8,8 +8,9 @@
     showNewIssue,
     lastSyncAt,
     newSinceLastSync,
-    settingsSection,
     appVersion,
+    appView,
+    updateAvailable,
   } from "../stores";
 
   interface Props {
@@ -35,8 +36,7 @@
   }
   function openAbout() {
     menuOpen = false;
-    $settingsSection = "about";
-    $activeTab = "settings";
+    $appView = { kind: "about" };
   }
 
   // Tick the "synced Xm ago" label every 20s so it stays fresh without
@@ -147,6 +147,9 @@
             src={$auth.user.avatar_url}
             alt={$auth.user.login}
           />
+          {#if $updateAvailable}
+            <span class="update-badge" aria-label="Update available" title="Update available"></span>
+          {/if}
         </button>
 
         {#if menuOpen}
@@ -163,6 +166,33 @@
               </div>
             </div>
             <div class="menu-sep"></div>
+            {#if $updateAvailable}
+              <button
+                class="menu-item update-row"
+                onclick={openAbout}
+                role="menuitem"
+                title="A new version is available"
+              >
+                <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Zm6.5-3a.75.75 0 0 1 .75.75V8h2.25a.75.75 0 0 1 .53 1.28l-3 3a.75.75 0 0 1-1.06 0l-3-3A.75.75 0 0 1 4.5 8H6.75V5.75A.75.75 0 0 1 7.5 5h.5Z"
+                  />
+                </svg>
+                <span>Update to v{$updateAvailable.version}</span>
+              </button>
+              <div class="menu-sep"></div>
+            {/if}
+            <button class="menu-item" onclick={openAbout} role="menuitem">
+              <!-- info -->
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm6.5-.25A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"
+                />
+              </svg>
+              <span>About</span>
+            </button>
             <button class="menu-item" onclick={openSettings} role="menuitem">
               <!-- gear -->
               <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
@@ -276,6 +306,7 @@
     border-radius: 50%;
     padding: 0;
     line-height: 0;
+    position: relative;
     transition: box-shadow 0.12s;
   }
   .avatar-btn:hover {
@@ -283,6 +314,23 @@
   }
   .avatar-btn.active {
     box-shadow: 0 0 0 2px var(--accent);
+  }
+  .update-badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #f0b429;
+    border: 2px solid var(--bg-elev);
+    pointer-events: none;
+  }
+  .update-row {
+    color: #f0b429;
+  }
+  .update-row:hover {
+    background: color-mix(in srgb, #f0b429 18%, transparent);
   }
   .menu {
     position: absolute;

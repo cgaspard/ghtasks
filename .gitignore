@@ -24,6 +24,11 @@ Thumbs.db
 .env.local
 .env.*.local
 
+# Tauri updater signing keys — never commit these.
+.signing/
+*.key
+*.pem
+
 # Logs
 *.log
 npm-debug.log*

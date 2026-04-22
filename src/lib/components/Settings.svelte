@@ -1,12 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { openUrl } from "@tauri-apps/plugin-opener";
   import { api, type Repo, type Settings as SettingsT } from "../api";
-  import { lastError, settingsSection, appVersion } from "../stores";
+  import { lastError, settingsSection } from "../stores";
   import SourceEditor from "./SourceEditor.svelte";
   import Select from "./Select.svelte";
-
-  const REPO_URL = "https://github.com/cgaspard/ghtasks";
 
   interface Props {
     onSourcesChanged: () => Promise<void> | void;
@@ -51,13 +48,12 @@
     }
   }
 
-  function toggle(section: "general" | "sources" | "about") {
+  function toggle(section: "general" | "sources") {
     $settingsSection = $settingsSection === section ? "general" : section;
   }
 
   const sourcesOpen = $derived($settingsSection === "sources");
   const generalOpen = $derived($settingsSection === "general");
-  const aboutOpen = $derived($settingsSection === "about");
 </script>
 
 <div class="wrap">
@@ -145,47 +141,6 @@
         {#if saved}
           <div class="saved">Saved</div>
         {/if}
-      </div>
-    {/if}
-  </section>
-
-  <!-- About -->
-  <section class="acc" class:open={aboutOpen}>
-    <button class="acc-head" onclick={() => toggle("about")}>
-      <span class="icon" aria-hidden="true">{aboutOpen ? "−" : "+"}</span>
-      <span class="acc-title">About</span>
-      <span class="status-tag" aria-hidden="true"
-        >{aboutOpen ? "Hide" : "Show"}</span
-      >
-    </button>
-    {#if $settingsSection === "about"}
-      <div class="acc-body about">
-        <div class="about-title">
-          GH Tasks <span class="about-ver">v{$appVersion ?? "…"}</span>
-        </div>
-        <p class="muted small">
-          Backed by GitHub Issues + Projects. Your data stays with GitHub —
-          no backend, no telemetry.
-        </p>
-        <div class="about-links">
-          <button class="linklike" onclick={() => openUrl(REPO_URL)}>
-            GitHub repository ↗
-          </button>
-          <button
-            class="linklike"
-            onclick={() =>
-              openUrl(`${REPO_URL}/releases/tag/v${$appVersion ?? ""}`)}
-            disabled={!$appVersion}
-          >
-            Release notes ↗
-          </button>
-          <button
-            class="linklike"
-            onclick={() => openUrl(`${REPO_URL}/issues/new`)}
-          >
-            Report an issue ↗
-          </button>
-        </div>
       </div>
     {/if}
   </section>
@@ -289,46 +244,8 @@
     gap: 6px;
     color: var(--text);
   }
-  .small {
-    font-size: 11px;
-  }
   .saved {
     color: var(--ok);
     font-size: 12px;
-  }
-  .about-title {
-    color: var(--text);
-    font-weight: 600;
-    font-size: 13px;
-  }
-  .about-ver {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 12px;
-    color: var(--text-dim);
-    font-weight: 500;
-    margin-left: 4px;
-  }
-  .about-links {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    margin-top: 4px;
-  }
-  .linklike {
-    all: unset;
-    cursor: pointer;
-    color: var(--accent);
-    font-size: 12px;
-    width: fit-content;
-  }
-  .linklike:hover {
-    text-decoration: underline;
-  }
-  .linklike:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-  .linklike:disabled:hover {
-    text-decoration: none;
   }
 </style>

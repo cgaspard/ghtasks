@@ -19,6 +19,7 @@
     pruneRecentlyCreated,
     appVersion,
     appView,
+    updateAvailable,
   } from "./lib/stores";
   import { get } from "svelte/store";
   import Login from "./lib/components/Login.svelte";
@@ -28,8 +29,10 @@
   import Settings from "./lib/components/Settings.svelte";
   import TopBar from "./lib/components/TopBar.svelte";
   import IssueDetail from "./lib/components/IssueDetail.svelte";
+  import About from "./lib/components/About.svelte";
 
   let pollHandle: ReturnType<typeof setInterval> | null = null;
+  let updateCheckHandle: ReturnType<typeof setInterval> | null = null;
   let unlistenProjectPage: UnlistenFn | null = null;
   /** Bumped on each refresh. Pages arriving for an older generation are
    * ignored so late stragglers don't leak into the next refresh. */
@@ -272,6 +275,29 @@
 
     void getVersion().then((v) => ($appVersion = v));
 
+    // Silent background update check: once on launch (after a short
+    // delay so we don't stack with the initial sync + auth on cold
+    // start) and then every 4 hours for long-running sessions.
+    async function backgroundUpdateCheck() {
+      try {
+        const res = await api.checkForUpdates();
+        if (res.available) {
+          $updateAvailable = {
+            version: res.version ?? "",
+            body: res.body,
+          };
+        } else {
+          $updateAvailable = null;
+        }
+      } catch (e) {
+        console.warn("[ghtasks] update check failed:", e);
+      }
+    }
+    setTimeout(() => {
+      void backgroundUpdateCheck();
+    }, 5_000);
+    updateCheckHandle = setInterval(backgroundUpdateCheck, 4 * 60 * 60 * 1000);
+
     void refreshAuth();
     // Poll every 90s while authenticated.
     pollHandle = setInterval(() => {
@@ -280,6 +306,7 @@
     window.addEventListener("keydown", onKeydown);
     return () => {
       if (pollHandle) clearInterval(pollHandle);
+      if (updateCheckHandle) clearInterval(updateCheckHandle);
       if (unlistenProjectPage) unlistenProjectPage();
       window.removeEventListener("keydown", onKeydown);
     };
@@ -292,10 +319,10 @@
   {:else}
     <TopBar onRefresh={refresh} />
     <div class="body">
-      <div class="slider" class:to-detail={$appView.kind === "detail"}>
+      <div class="slider" class:to-detail={$appView.kind !== "list"}>
         <div
           class="pane list"
-          inert={$appView.kind === "detail" ? true : null}
+          inert={$appView.kind !== "list" ? true : null}
         >
           {#if $activeTab === "projects"}
             <ProjectList />
@@ -307,7 +334,7 @@
         </div>
         <div
           class="pane detail"
-          inert={$appView.kind !== "detail" ? true : null}
+          inert={$appView.kind === "list" ? true : null}
         >
           {#if $appView.kind === "detail"}
             <IssueDetail
@@ -315,6 +342,8 @@
               number={$appView.number}
               onBack={() => ($appView = { kind: "list" })}
             />
+          {:else if $appView.kind === "about"}
+            <About onBack={() => ($appView = { kind: "list" })} />
           {/if}
         </div>
       </div>

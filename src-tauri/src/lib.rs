@@ -49,6 +49,7 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState {
             http: github::http_client(),
         })
@@ -135,6 +136,8 @@ pub fn run() {
             commands::autostart_status,
             commands::list_issue_templates,
             commands::get_issue_detail,
+            commands::check_for_updates,
+            commands::install_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

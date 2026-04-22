@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22">
+  <!-- Tray icon: simplified branch + checkmark silhouette.
+       Designed for macOS template-image rendering — black-only on
+       transparent. The macOS menu bar tints it white in dark mode
+       automatically, so everything must be opaque black. The
+       checkmark is cut OUT of the branch-end disc using a mask so it
+       stays visible when the whole icon gets re-tinted. -->
+  <defs>
+    <mask id="check-cutout">
+      <!-- White = keep (show black fill); black = cut out -->
+      <rect width="22" height="22" fill="white"/>
+      <path d="M 11.8 7 L 13.3 8.5 L 16.2 5.5"
+            stroke="black" stroke-width="1.3"
+            stroke-linecap="round" stroke-linejoin="round"
+            fill="none"/>
+    </mask>
+  </defs>
+
+  <g fill="black">
+    <!-- Trunk -->
+    <rect x="5" y="3" width="2" height="16" rx="1"/>
+    <!-- Branch arc -->
+    <path d="M 6 10 Q 6 7 12 7" stroke="black" stroke-width="2"
+          stroke-linecap="round" fill="none"/>
+    <!-- Bottom trunk node -->
+    <circle cx="6" cy="18" r="2"/>
+    <!-- Top trunk node -->
+    <circle cx="6" cy="4" r="2"/>
+    <!-- Branch end disc, with checkmark cut out -->
+    <circle cx="14" cy="7" r="4" mask="url(#check-cutout)"/>
+  </g>
+</svg>
