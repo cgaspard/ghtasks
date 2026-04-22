@@ -166,6 +166,89 @@ export interface NewIssueInput {
   type?: string;
 }
 
+/** A GitHub issue template (either markdown-with-frontmatter or YAML form). */
+export type IssueTemplate =
+  | {
+      kind: "markdown";
+      filename: string;
+      name: string;
+      about: string | null;
+      title: string | null;
+      labels: string[];
+      assignees: string[];
+      body: string;
+    }
+  | {
+      kind: "form";
+      filename: string;
+      name: string;
+      description: string | null;
+      title: string | null;
+      labels: string[];
+      assignees: string[];
+      body: FormField[];
+    };
+
+export type FormField =
+  | { type: "markdown"; value: string }
+  | {
+      type: "input";
+      id: string | null;
+      label: string;
+      description: string | null;
+      placeholder: string | null;
+      default_value: string | null;
+      required: boolean;
+    }
+  | {
+      type: "textarea";
+      id: string | null;
+      label: string;
+      description: string | null;
+      placeholder: string | null;
+      default_value: string | null;
+      render: string | null;
+      required: boolean;
+    }
+  | {
+      type: "dropdown";
+      id: string | null;
+      label: string;
+      description: string | null;
+      options: string[];
+      default_index: number | null;
+      multiple: boolean;
+      required: boolean;
+    }
+  | {
+      type: "checkboxes";
+      id: string | null;
+      label: string;
+      description: string | null;
+      options: Array<{ label: string; required: boolean }>;
+    };
+
+export interface IssueTemplateSet {
+  templates: IssueTemplate[];
+  blank_issues_enabled: boolean;
+}
+
+export interface IssueComment {
+  id: number;
+  node_id: string;
+  html_url: string;
+  user: IssueUser | null;
+  body: string | null;
+  created_at: string;
+  updated_at: string;
+  author_association: string | null;
+}
+
+export interface IssueDetail {
+  issue: Issue;
+  comments: IssueComment[];
+}
+
 export interface Settings {
   default_repo: string | null;
   poll_interval_secs: number;
@@ -233,6 +316,10 @@ export const api = {
       statusOptionId: status_option_id ?? null,
     }),
   autostartStatus: () => invoke<boolean>("autostart_status"),
+  listIssueTemplates: (repo: string) =>
+    invoke<IssueTemplateSet>("list_issue_templates", { repo }),
+  getIssueDetail: (repo: string, number: number) =>
+    invoke<IssueDetail>("get_issue_detail", { repo, number }),
 };
 
 export function repoFullName(issue: Issue): string {

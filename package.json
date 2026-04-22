@@ -1,7 +1,7 @@
 {
   "name": "ghtasks",
   "private": true,
-  "version": "0.1.9",
+  "version": "0.1.10",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,7 +14,8 @@
     "@tauri-apps/api": "^2.1.1",
     "@tauri-apps/plugin-notification": "^2.2.0",
     "@tauri-apps/plugin-opener": "^2.2.0",
-    "@tauri-apps/plugin-store": "^2.2.0"
+    "@tauri-apps/plugin-store": "^2.2.0",
+    "marked": "^18.0.2"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.3",

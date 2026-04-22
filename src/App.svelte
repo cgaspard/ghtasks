@@ -18,6 +18,7 @@
     recentlyCreated,
     pruneRecentlyCreated,
     appVersion,
+    appView,
   } from "./lib/stores";
   import { get } from "svelte/store";
   import Login from "./lib/components/Login.svelte";
@@ -26,6 +27,7 @@
   import NewIssue from "./lib/components/NewIssue.svelte";
   import Settings from "./lib/components/Settings.svelte";
   import TopBar from "./lib/components/TopBar.svelte";
+  import IssueDetail from "./lib/components/IssueDetail.svelte";
 
   let pollHandle: ReturnType<typeof setInterval> | null = null;
   let unlistenProjectPage: UnlistenFn | null = null;
@@ -290,13 +292,32 @@
   {:else}
     <TopBar onRefresh={refresh} />
     <div class="body">
-      {#if $activeTab === "projects"}
-        <ProjectList />
-      {:else if $activeTab === "issues"}
-        <IssueList />
-      {:else if $activeTab === "settings"}
-        <Settings onSourcesChanged={refresh} />
-      {/if}
+      <div class="slider" class:to-detail={$appView.kind === "detail"}>
+        <div
+          class="pane list"
+          inert={$appView.kind === "detail" ? true : null}
+        >
+          {#if $activeTab === "projects"}
+            <ProjectList />
+          {:else if $activeTab === "issues"}
+            <IssueList />
+          {:else if $activeTab === "settings"}
+            <Settings onSourcesChanged={refresh} />
+          {/if}
+        </div>
+        <div
+          class="pane detail"
+          inert={$appView.kind !== "detail" ? true : null}
+        >
+          {#if $appView.kind === "detail"}
+            <IssueDetail
+              repo={$appView.repo}
+              number={$appView.number}
+              onBack={() => ($appView = { kind: "list" })}
+            />
+          {/if}
+        </div>
+      </div>
     </div>
     {#if $showNewIssue}
       <NewIssue onCreated={refresh} />
@@ -317,8 +338,35 @@
   }
   .body {
     flex: 1;
-    overflow: auto;
     min-height: 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .slider {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 200%;
+    height: 100%;
+    display: grid;
+    grid-template-columns: 50% 50%;
+    grid-template-rows: 100%;
+    will-change: transform;
+    transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .slider.to-detail {
+    transform: translateX(-50%);
+  }
+  .pane {
+    min-width: 0;
+    min-height: 0;
+    /* Explicit height so child `.wrap` elements (which use
+     * `height: 100%`) have a definite value to resolve against. Grid
+     * row sizing alone isn't enough — `height: 100%` in a child
+     * requires the parent to have a computed height, not just
+     * stretch-to-fill behavior. */
+    height: 100%;
+    overflow: hidden;
   }
   .error {
     background: rgba(229, 72, 77, 0.15);

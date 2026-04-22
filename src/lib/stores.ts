@@ -205,6 +205,16 @@ export const settingsFocus = writable<"new-project" | "new-repo" | null>(null);
  * startup; null until resolved. */
 export const appVersion = writable<string | null>(null);
 
+/** Navigation stack. `list` is the default view; `detail` shows a single
+ * issue's full body + comments, sliding in from the right. One level
+ * deep by design — drilling into cross-linked issues opens github.com
+ * rather than pushing another frame. */
+export type AppView =
+  | { kind: "list" }
+  | { kind: "detail"; repo: string; number: number; nodeId: string };
+
+export const appView = writable<AppView>({ kind: "list" });
+
 /** Flat list of issues across enabled, selected sources, deduped by node_id. */
 export const visibleIssues = derived(
   [sourceResults, selectedSourceIds],

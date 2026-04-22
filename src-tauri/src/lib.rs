@@ -7,6 +7,7 @@ mod migration;
 mod notify;
 mod projects;
 mod sources;
+mod templates;
 mod tray;
 
 use commands::AppState;
@@ -132,6 +133,8 @@ pub fn run() {
             commands::add_issue_comment,
             commands::create_issue_in_project,
             commands::autostart_status,
+            commands::list_issue_templates,
+            commands::get_issue_detail,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

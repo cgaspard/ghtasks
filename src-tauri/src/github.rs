@@ -221,6 +221,70 @@ pub async fn create_issue(
     json(resp).await
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct IssueComment {
+    pub id: u64,
+    pub node_id: String,
+    pub html_url: String,
+    pub user: Option<IssueUser>,
+    pub body: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub author_association: Option<String>,
+}
+
+/// Fetch a single issue's full payload. The REST search endpoint returns a
+/// trimmed shape; this gives us the body, closed_at, reactions, etc.
+pub async fn get_issue(
+    client: &reqwest::Client,
+    token: &str,
+    repo_full_name: &str,
+    number: u64,
+) -> Result<Issue> {
+    let resp = crate::http_log::send_timed(
+        client,
+        "get_issue",
+        client
+            .get(format!(
+                "{API_BASE}/repos/{repo_full_name}/issues/{number}"
+            ))
+            .headers(auth_headers(token)),
+    )
+    .await?;
+    json(resp).await
+}
+
+/// Fetch every comment on an issue. Paginated at 100/page, capped at 500
+/// — boards with more than that are rare and we surface a "see full
+/// thread on GitHub" hint in the UI for anything truncated.
+pub async fn list_issue_comments(
+    client: &reqwest::Client,
+    token: &str,
+    repo_full_name: &str,
+    number: u64,
+) -> Result<Vec<IssueComment>> {
+    let mut out: Vec<IssueComment> = Vec::new();
+    for page in 1..=5u32 {
+        let resp = crate::http_log::send_timed(
+            client,
+            "list_issue_comments",
+            client
+                .get(format!(
+                    "{API_BASE}/repos/{repo_full_name}/issues/{number}/comments?per_page=100&page={page}&sort=created"
+                ))
+                .headers(auth_headers(token)),
+        )
+        .await?;
+        let batch: Vec<IssueComment> = json(resp).await?;
+        let got = batch.len();
+        out.extend(batch);
+        if got < 100 {
+            break;
+        }
+    }
+    Ok(out)
+}
+
 /// Close or reopen an issue.
 pub async fn set_issue_state(
     client: &reqwest::Client,

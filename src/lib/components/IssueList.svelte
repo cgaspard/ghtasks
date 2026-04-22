@@ -14,6 +14,7 @@
     activeTab,
     settingsSection,
     settingsFocus,
+    appView,
   } from "../stores";
 
   let filter = $state("");
@@ -72,6 +73,17 @@
 
   async function open(issue: Issue) {
     await openUrl(issue.html_url);
+  }
+
+  function drillIn(issue: Issue) {
+    const repo = repoFullName(issue);
+    if (!repo) return;
+    $appView = {
+      kind: "detail",
+      repo,
+      number: issue.number,
+      nodeId: issue.node_id,
+    };
   }
 
   function askClose(issue: Issue) {
@@ -253,6 +265,19 @@
                 {/each}
               </div>
             </div>
+            <button
+              class="drill"
+              title="View issue"
+              aria-label="View issue"
+              onclick={() => drillIn(issue)}
+            >
+              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"
+                />
+              </svg>
+            </button>
           {/if}
         </li>
       {/each}
@@ -468,6 +493,28 @@
   .check:hover {
     color: var(--ok);
     border-color: var(--ok);
+  }
+  .drill {
+    all: unset;
+    cursor: pointer;
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    color: var(--text-dim);
+    flex: 0 0 auto;
+    opacity: 0.6;
+    transition: opacity 0.12s, background 0.12s, color 0.12s;
+  }
+  .issue:hover .drill {
+    opacity: 1;
+  }
+  .drill:hover {
+    background: var(--bg-hover);
+    color: var(--text);
   }
   .main {
     flex: 1;

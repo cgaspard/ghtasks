@@ -1,7 +1,10 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import {
     api,
     type Issue,
+    type IssueTemplate,
+    type IssueTemplateSet,
     type Repo,
     type RepoLabel,
     type Source,
@@ -15,9 +18,17 @@
     sourceResults,
     sources,
   } from "../stores";
+  import {
+    initialFormValues,
+    resolveAssignees,
+    serializeForm,
+    validateForm,
+    type FormValues,
+  } from "../issueTemplateForm";
   import FilterPicker from "./FilterPicker.svelte";
   import StatusPicker from "./StatusPicker.svelte";
   import Select from "./Select.svelte";
+  import IssueTemplateForm from "./IssueTemplateForm.svelte";
 
   interface Props {
     onCreated: () => Promise<void> | void;
@@ -61,6 +72,27 @@
   let repoLabels: RepoLabel[] = $state([]);
   let loadingLabels = $state(false);
   let lastLabelsRepo = $state("");
+
+  /** Issue templates for the currently selected repo. Fetched per-repo
+   * and cached for this modal instance so switching repos doesn't
+   * re-hit the Contents API unnecessarily. */
+  let templates: IssueTemplate[] = $state([]);
+  let blankEnabled = $state(true);
+  let loadingTemplates = $state(false);
+  let lastTemplatesRepo = $state("");
+  const templatesByRepo = new Map<string, IssueTemplateSet>();
+
+  /** Selected template's filename, or "" for the blank default. */
+  let templateKey = $state("");
+  let formValues: FormValues = $state({});
+  /** Track whether the user has hand-edited body/title so we don't
+   * clobber their in-progress input when switching templates. */
+  let titleTouched = $state(false);
+  let bodyTouched = $state(false);
+
+  const activeTemplate = $derived<IssueTemplate | null>(
+    templates.find((t) => t.filename === templateKey) ?? null,
+  );
 
   const projectSources = $derived(
     $sources.filter((s) => s.kind === "project" && s.enabled),
@@ -126,6 +158,84 @@
       });
   });
 
+  $effect(() => {
+    // When the selected repo changes, fetch its issue templates. Served
+    // from a local cache on subsequent picks of the same repo.
+    if (!repo || repo === lastTemplatesRepo) return;
+    const target = repo;
+    lastTemplatesRepo = target;
+    templateKey = "";
+    formValues = {};
+
+    const cached = templatesByRepo.get(target);
+    if (cached) {
+      templates = cached.templates;
+      blankEnabled = cached.blank_issues_enabled;
+      return;
+    }
+    loadingTemplates = true;
+    templates = [];
+    api
+      .listIssueTemplates(target)
+      .then((set) => {
+        if (lastTemplatesRepo !== target) return;
+        templatesByRepo.set(target, set);
+        templates = set.templates;
+        blankEnabled = set.blank_issues_enabled;
+      })
+      .catch((e) => {
+        // Non-fatal — templates are a nice-to-have. Log to console so
+        // devtools users can still diagnose, but don't surface to the
+        // user as an error banner.
+        console.warn("[ghtasks] listIssueTemplates failed:", e);
+      })
+      .finally(() => {
+        if (lastTemplatesRepo === target) loadingTemplates = false;
+      });
+  });
+
+  /** Apply a newly-selected template: prefill title / body / labels,
+   * resetting the touched-flags so re-picking another template can
+   * overwrite cleanly. Never clobbers a user's in-progress typing. */
+  function applyTemplate(t: IssueTemplate | null) {
+    if (!t) {
+      formValues = {};
+      return;
+    }
+    if (!titleTouched) {
+      if (t.title) title = t.title;
+    }
+    if (t.labels.length > 0) {
+      // Merge additively — if they already picked labels, keep them.
+      selectedLabels = new Set([...selectedLabels, ...t.labels]);
+    }
+    const resolved = resolveAssignees(t.assignees, myLogin || null);
+    if (resolved.length > 0) {
+      // The template is explicit about assignees — honor it. If @me is
+      // listed, assignToMe stays on; otherwise turn it off so we don't
+      // double-assign.
+      assignToMe = resolved.includes(myLogin);
+    }
+    if (t.kind === "markdown") {
+      if (!bodyTouched) body = t.body;
+      formValues = {};
+    } else {
+      // For forms we stash the textarea content (in case the user types
+      // free-form into it) and replace the body with the rendered form.
+      formValues = initialFormValues(t.body);
+      if (!bodyTouched) body = "";
+    }
+  }
+
+  $effect(() => {
+    // React to template-picker changes only. Reading other state (like
+    // `titleTouched`) inside `applyTemplate` would otherwise make the
+    // effect re-fire on every keystroke in the title input — causing a
+    // feedback loop through the labels Set and a frozen UI.
+    const t = activeTemplate;
+    untrack(() => applyTemplate(t));
+  });
+
   function close() {
     $showNewIssue = false;
     reset();
@@ -136,6 +246,10 @@
     selectedLabels = new Set();
     issueType = "Task";
     assignToMe = true;
+    templateKey = "";
+    formValues = {};
+    titleTouched = false;
+    bodyTouched = false;
   }
 
   async function submit(e: Event) {
@@ -145,9 +259,22 @@
       $lastError = "Pick a repository.";
       return;
     }
+
+    // If the active template is a form, validate required fields and
+    // serialize the values into a markdown body matching GitHub's shape.
+    let composedBody = body.trim();
+    if (activeTemplate && activeTemplate.kind === "form") {
+      const errs = validateForm(activeTemplate.body, formValues);
+      if (errs.length > 0) {
+        $lastError = errs.join(" · ");
+        return;
+      }
+      composedBody = serializeForm(activeTemplate.body, formValues);
+    }
+
     const input = {
       title: title.trim(),
-      body: body.trim() || undefined,
+      body: composedBody || undefined,
       labels: selectedLabels.size > 0 ? [...selectedLabels] : undefined,
       type: issueType || undefined,
       assignees: assignToMe && myLogin ? [myLogin] : undefined,
@@ -378,22 +505,64 @@
         />
       </label>
 
+      {#if templates.length > 0 || loadingTemplates}
+        <label>
+          Template
+          <Select
+            value={templateKey}
+            placeholder={loadingTemplates ? "Loading…" : "Pick a template"}
+            options={[
+              ...(blankEnabled
+                ? [{ value: "", label: "Blank (no template)" }]
+                : []),
+              ...templates.map((t) => ({
+                value: t.filename,
+                label: t.name,
+                sublabel:
+                  t.kind === "markdown"
+                    ? (t.about ?? undefined)
+                    : (t.description ?? undefined),
+              })),
+            ]}
+            onChange={(v) => (templateKey = (v as string) ?? "")}
+          />
+        </label>
+      {/if}
+
       <label>
         Title
         <!-- svelte-ignore a11y_autofocus -->
         <input
-          bind:value={title}
+          value={title}
+          oninput={(e) => {
+            title = e.currentTarget.value;
+            titleTouched = true;
+          }}
           placeholder="What needs to be done?"
           required
           autofocus
         />
       </label>
 
-      <label>
-        Body (markdown)
-        <textarea rows="5" bind:value={body} placeholder="Notes, checklist…"
-        ></textarea>
-      </label>
+      {#if activeTemplate && activeTemplate.kind === "form"}
+        <IssueTemplateForm
+          fields={activeTemplate.body}
+          bind:values={formValues}
+        />
+      {:else}
+        <label>
+          Body (markdown)
+          <textarea
+            rows="5"
+            value={body}
+            oninput={(e) => {
+              body = e.currentTarget.value;
+              bodyTouched = true;
+            }}
+            placeholder="Notes, checklist…"
+          ></textarea>
+        </label>
+      {/if}
 
       <div class="row">
         <label class="grow">

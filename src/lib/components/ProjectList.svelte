@@ -22,6 +22,7 @@
     activeTab,
     settingsSection,
     settingsFocus,
+    appView,
   } from "../stores";
   import FilterPicker from "./FilterPicker.svelte";
   import StatusPicker from "./StatusPicker.svelte";
@@ -291,6 +292,16 @@
     settingsFocus.set("new-project");
     $settingsSection = "sources";
     $activeTab = "settings";
+  }
+
+  function drillIn(item: ProjectItem) {
+    if (!item.repo) return;
+    $appView = {
+      kind: "detail",
+      repo: item.repo,
+      number: item.issue.number,
+      nodeId: item.issue.node_id,
+    };
   }
 
   async function changeStatus(
@@ -584,6 +595,19 @@
                 onclick={() => open(item.issue)}
                 aria-label="Open on GitHub">↗</button
               >
+              <button
+                class="tray-btn drill"
+                title="View issue"
+                onclick={() => drillIn(item)}
+                aria-label="View issue"
+              >
+                <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"
+                  />
+                </svg>
+              </button>
             </div>
           </div>
           {#if commentingId === item.item_id}

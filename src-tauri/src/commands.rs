@@ -1,6 +1,6 @@
 use crate::auth;
 use crate::error::{Error, Result};
-use crate::github::{self, Issue, NewIssueInput, Repo, RepoLabel, User};
+use crate::github::{self, Issue, IssueComment, NewIssueInput, Repo, RepoLabel, User};
 use crate::notify;
 use crate::projects::{self, ProjectSnapshot, ProjectSummary};
 use tauri::Emitter;
@@ -621,4 +621,39 @@ pub async fn create_issue_in_project(
     }
 
     Ok(CreateIssueInProjectResult { issue, item_id })
+}
+
+// ------------------------- Issue templates ---------------------------
+
+#[tauri::command]
+pub async fn list_issue_templates(
+    state: State<'_, AppState>,
+    repo: String,
+) -> Result<crate::templates::IssueTemplateSet> {
+    let token = require_token().await?;
+    crate::templates::list_issue_templates(&state.http, &token, &repo).await
+}
+
+// ------------------------- Issue detail ------------------------------
+
+#[derive(Debug, Serialize)]
+pub struct IssueDetail {
+    pub issue: Issue,
+    pub comments: Vec<IssueComment>,
+}
+
+/// Fetch the full issue + every comment in one round-trip from the
+/// frontend. Body and comments run in parallel.
+#[tauri::command]
+pub async fn get_issue_detail(
+    state: State<'_, AppState>,
+    repo: String,
+    number: u64,
+) -> Result<IssueDetail> {
+    let token = require_token().await?;
+    let (issue, comments) = tokio::try_join!(
+        github::get_issue(&state.http, &token, &repo, number),
+        github::list_issue_comments(&state.http, &token, &repo, number),
+    )?;
+    Ok(IssueDetail { issue, comments })
 }
