@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- "Update available" tray icon.
+       Bold filled circle with a down-arrow carved out. Renders as a
+       pure template image — macOS tints white on dark menu bars and
+       black on light. The carved arrow is the universal "pending
+       download" signal; the solid ring around it makes the shape
+       register clearly at 22px menu-bar size where subtler icons
+       disappear. Deliberately a completely different silhouette
+       class from the default Octocat tray so the change is obvious
+       at a glance. -->
+  <defs>
+    <mask id="arrow-cut">
+      <!-- White keeps the black disc; black punches the arrow hole. -->
+      <rect width="32" height="32" fill="white"/>
+      <!-- Arrow stem -->
+      <rect x="13" y="7" width="6" height="10" fill="black"/>
+      <!-- Arrow head: wide triangle pointing down -->
+      <path d="M 8 15 L 24 15 L 16 24 Z" fill="black"/>
+    </mask>
+  </defs>
+
+  <!-- Bold disc with the arrow mask cutting through. Small inset so
+       the disc doesn't bleed to the absolute edge; the menu bar
+       usually wants a ~2px inset for visual balance. -->
+  <circle cx="16" cy="16" r="14" fill="black" mask="url(#arrow-cut)"/>
+</svg>

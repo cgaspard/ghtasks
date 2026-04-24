@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { api } from "../api";
-  import { appVersion, lastError } from "../stores";
+  import { appVersion, lastError, updateAvailable } from "../stores";
 
   interface Props {
     onBack: () => void;
@@ -31,8 +31,16 @@
           version: res.version ?? "",
           body: res.body,
         };
+        // Also publish to the app-wide store so the avatar badge and
+        // "Update to vX" menu row appear. Without this the About panel
+        // knows about the update but the rest of the UI doesn't.
+        $updateAvailable = {
+          version: res.version ?? "",
+          body: res.body,
+        };
       } else {
         updateStatus = { kind: "current" };
+        $updateAvailable = null;
       }
     } catch (e) {
       updateStatus = { kind: "error", message: String(e) };

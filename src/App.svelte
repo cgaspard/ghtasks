@@ -30,6 +30,7 @@
   import TopBar from "./lib/components/TopBar.svelte";
   import IssueDetail from "./lib/components/IssueDetail.svelte";
   import About from "./lib/components/About.svelte";
+  import UpdateBanner from "./lib/components/UpdateBanner.svelte";
 
   let pollHandle: ReturnType<typeof setInterval> | null = null;
   let updateCheckHandle: ReturnType<typeof setInterval> | null = null;
@@ -275,9 +276,22 @@
 
     void getVersion().then((v) => ($appVersion = v));
 
-    // Silent background update check: once on launch (after a short
-    // delay so we don't stack with the initial sync + auth on cold
-    // start) and then every 4 hours for long-running sessions.
+    // Mirror `$updateAvailable` into the macOS tray icon. Swaps to an
+    // "octocat with down-arrow notch" silhouette + tooltip when an
+    // update is pending, so users with the window closed still see
+    // a signal in their menu bar.
+    const unsubUpdate = updateAvailable.subscribe((u) => {
+      void api
+        .setTrayUpdateState(u !== null, u?.version ?? null)
+        .catch((e) => console.warn("[ghtasks] set_tray_update_state failed:", e));
+    });
+
+    // Silent background update check: runs shortly after launch and
+    // then every 4 hours for long-running sessions. The 2s delay is
+    // just enough to let the first `fetch_all` kick off so the two
+    // calls don't contend on the network; shorter than the previous
+    // 5s so the avatar-dot indicator appears before a user would
+    // normally open the menu.
     async function backgroundUpdateCheck() {
       try {
         const res = await api.checkForUpdates();
@@ -286,6 +300,9 @@
             version: res.version ?? "",
             body: res.body,
           };
+          console.log(
+            `[ghtasks] update available: v${res.version ?? "?"}`,
+          );
         } else {
           $updateAvailable = null;
         }
@@ -295,7 +312,7 @@
     }
     setTimeout(() => {
       void backgroundUpdateCheck();
-    }, 5_000);
+    }, 2_000);
     updateCheckHandle = setInterval(backgroundUpdateCheck, 4 * 60 * 60 * 1000);
 
     void refreshAuth();
@@ -308,6 +325,7 @@
       if (pollHandle) clearInterval(pollHandle);
       if (updateCheckHandle) clearInterval(updateCheckHandle);
       if (unlistenProjectPage) unlistenProjectPage();
+      unsubUpdate();
       window.removeEventListener("keydown", onKeydown);
     };
   });
@@ -348,6 +366,7 @@
         </div>
       </div>
     </div>
+    <UpdateBanner />
     {#if $showNewIssue}
       <NewIssue onCreated={refresh} />
     {/if}

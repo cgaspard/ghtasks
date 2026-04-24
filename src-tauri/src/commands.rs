@@ -674,6 +674,20 @@ pub async fn check_for_updates(app: AppHandle) -> Result<UpdateCheckResult> {
     }
 }
 
+/// Swap the tray icon between its default (Octocat) and update-pending
+/// (Octocat with down-arrow notch) variants. Called from the frontend
+/// whenever the `$updateAvailable` store changes so that users with the
+/// window closed still see an update indicator in their menu bar.
+#[tauri::command]
+pub async fn set_tray_update_state(
+    app: AppHandle,
+    available: bool,
+    version: Option<String>,
+) -> Result<()> {
+    crate::tray::set_update_state(&app, available, version.as_deref());
+    Ok(())
+}
+
 /// Download + install the available update and relaunch. Blocks until
 /// install completes; on macOS the app replaces its bundle in place
 /// then respawns.

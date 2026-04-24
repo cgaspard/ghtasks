@@ -1,6 +1,6 @@
 [package]
 name = "ghtasks"
-version = "0.1.12"
+version = "0.1.13"
 description = "GitHub Tasks — menu bar issue dashboard"
 authors = ["ghtasks"]
 edition = "2021"

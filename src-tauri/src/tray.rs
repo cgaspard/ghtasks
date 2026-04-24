@@ -9,6 +9,13 @@ use tauri::{
 /// tray always uses our icon instead of falling back to the app icon.
 const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/tray.png");
 
+/// Alternate tray icon shown when a newer release is available. Same
+/// octocat silhouette with a small down-arrow notched into the
+/// top-right corner — reads as "GitHub / pending download." Black on
+/// transparent, rendered as a template image so macOS tints it to
+/// match the menu bar.
+const TRAY_UPDATE_ICON_BYTES: &[u8] = include_bytes!("../icons/tray-update.png");
+
 pub fn setup(app: &App) -> tauri::Result<()> {
     let handle = app.handle();
 
@@ -183,4 +190,37 @@ fn position_under_tray(win: &tauri::WebviewWindow, tray_rect: Rect) {
         final_x.round() as i32,
         final_y.round() as i32,
     ));
+}
+
+/// Swap the tray icon + tooltip in response to an update-availability
+/// change. Called by the frontend when the `$updateAvailable` store
+/// changes. Keeps template-mode on so macOS keeps tinting the icon
+/// correctly for light/dark menu bars.
+pub fn set_update_state(
+    app: &tauri::AppHandle,
+    available: bool,
+    version: Option<&str>,
+) {
+    let Some(tray) = app.tray_by_id("main-tray") else {
+        return;
+    };
+
+    let (bytes, tooltip) = if available {
+        let tip = match version {
+            Some(v) if !v.is_empty() => format!("GH Tasks — update to v{v} available"),
+            _ => "GH Tasks — update available".to_string(),
+        };
+        (TRAY_UPDATE_ICON_BYTES, tip)
+    } else {
+        (TRAY_ICON_BYTES, "GH Tasks".to_string())
+    };
+
+    match Image::from_bytes(bytes) {
+        Ok(img) => {
+            let _ = tray.set_icon(Some(img));
+            let _ = tray.set_icon_as_template(true);
+        }
+        Err(e) => log::warn!("tray::set_update_state icon decode failed: {e}"),
+    }
+    let _ = tray.set_tooltip(Some(&tooltip));
 }

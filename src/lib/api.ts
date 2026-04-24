@@ -328,6 +328,8 @@ export const api = {
     invoke<IssueDetail>("get_issue_detail", { repo, number }),
   checkForUpdates: () => invoke<UpdateCheckResult>("check_for_updates"),
   installUpdate: () => invoke<void>("install_update"),
+  setTrayUpdateState: (available: boolean, version: string | null) =>
+    invoke<void>("set_tray_update_state", { available, version }),
 };
 
 export function repoFullName(issue: Issue): string {

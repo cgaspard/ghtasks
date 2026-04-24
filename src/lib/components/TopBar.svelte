@@ -317,14 +317,25 @@
   }
   .update-badge {
     position: absolute;
-    top: -2px;
-    right: -2px;
-    width: 9px;
-    height: 9px;
+    top: -3px;
+    right: -3px;
+    width: 11px;
+    height: 11px;
     border-radius: 50%;
     background: #f0b429;
     border: 2px solid var(--bg-elev);
     pointer-events: none;
+    box-shadow: 0 0 0 0 color-mix(in srgb, #f0b429 60%, transparent);
+    animation: badge-pulse 2s ease-in-out infinite;
+  }
+  @keyframes badge-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, #f0b429 60%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 0 4px color-mix(in srgb, #f0b429 0%, transparent);
+    }
   }
   .update-row {
     color: #f0b429;
