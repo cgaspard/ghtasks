@@ -1,6 +1,6 @@
 [package]
 name = "ghtasks"
-version = "0.1.11"
+version = "0.1.12"
 description = "GitHub Tasks — menu bar issue dashboard"
 authors = ["ghtasks"]
 edition = "2021"
@@ -13,7 +13,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon", "image-png", "devtools"] }
+tauri = { version = "2", features = ["tray-icon", "image-png", "devtools", "macos-private-api"] }
 tauri-plugin-shell = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-store = "2"

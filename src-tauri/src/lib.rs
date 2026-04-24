@@ -94,6 +94,19 @@ pub fn run() {
                 #[cfg(desktop)]
                 tray::apply_saved_size(&app.handle(), &win);
 
+                // The white flash on tray-click show is killed by wry
+                // setting `drawsBackground = false` on the WKWebView
+                // config whenever the `transparent` feature is on (which
+                // we enable via `macOSPrivateApi: true` in
+                // tauri.conf.json). That's independent of whether we
+                // set a background color here — so we deliberately
+                // DON'T set one. Setting an opaque color paints over
+                // the corner pixels where `#app`'s border-radius
+                // leaves gaps, defeating the CSS rounded-corner
+                // effect. Leaving `underPageBackgroundColor` unset
+                // keeps those corners transparent so the desktop
+                // shows through.
+
                 let win_clone = win.clone();
                 let auto_hide = app.state::<AutoHideOnBlur>().inner().clone();
                 win.on_window_event(move |event| {
