@@ -636,7 +636,7 @@ where
         // Emit in cursor order; stop at first missing / broken page so we
         // can serial-recover from that point.
         let mut hit_gap = false;
-        for (i, outcome) in outcomes.into_iter().enumerate() {
+        for outcome in outcomes.into_iter() {
             if hit_gap {
                 break;
             }
@@ -646,17 +646,20 @@ where
                         collected_cursors.push(c.clone());
                     }
                     last_serial_cursor = end.clone();
-                    let is_final_guess = !has_next && i + 1 == prior_cursors.len();
+                    // `has_next == false` means the server has no more pages
+                    // after this one — regardless of where this page sits in
+                    // the parallel cursor batch. The board may have *shrunk*
+                    // (items moved to a filtered status, archived, etc.), so
+                    // a mid-batch branch can be the true final page. If we
+                    // don't mark it final, the frontend never prunes stale
+                    // items out of its cached snapshot.
                     on_page(ProjectPageEvent {
                         source_id: source_id.to_string(),
                         project: project.clone(),
                         fields: vec![],
                         items,
                         is_first: false,
-                        // We don't KNOW this is final until serial-tail check
-                        // below confirms, but if the cursor set matched the
-                        // project exactly, this is the final page.
-                        is_final: is_final_guess,
+                        is_final: !has_next,
                         error: None,
                     });
                     if !has_next {
@@ -738,6 +741,19 @@ where
         last_serial_cursor = end;
     }
 
+    // Safety net: if we fell out without ever emitting a final event (e.g.
+    // a parallel branch nulled `last_serial_cursor` with an empty page),
+    // emit a synthetic terminal so the frontend's prune step can still run
+    // and drop stale items from the cached snapshot.
+    on_page(ProjectPageEvent {
+        source_id: source_id.to_string(),
+        project: placeholder_project(project_id),
+        fields: vec![],
+        items: vec![],
+        is_first: false,
+        is_final: true,
+        error: None,
+    });
     collected_cursors
 }
 
