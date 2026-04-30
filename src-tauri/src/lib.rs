@@ -46,7 +46,12 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
-            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            // AppleScript mode registers the app in the user's classic
+            // Login Items list, which is what System Settings → General →
+            // Login Items actually shows. LaunchAgent mode drops a plist
+            // in ~/Library/LaunchAgents/ that never appears in that UI,
+            // so users think the toggle is broken.
+            tauri_plugin_autostart::MacosLauncher::AppleScript,
             None,
         ))
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -77,6 +82,39 @@ pub fn run() {
             // Sync autostart to the saved setting (no-op if already matching).
             #[cfg(desktop)]
             {
+                // Earlier versions used MacosLauncher::LaunchAgent, which
+                // dropped a plist in ~/Library/LaunchAgents/ that never
+                // showed up in System Settings → Login Items. We're on
+                // AppleScript mode now; sweep up any leftover plist so a
+                // user who toggled it on under the old build doesn't end
+                // up double-registered.
+                #[cfg(target_os = "macos")]
+                {
+                    if let Some(home) = std::env::var_os("HOME") {
+                        let bundle_id = &app.config().identifier;
+                        let plist = std::path::PathBuf::from(home)
+                            .join("Library/LaunchAgents")
+                            .join(format!("{bundle_id}.plist"));
+                        if plist.exists() {
+                            let _ = std::process::Command::new("launchctl")
+                                .arg("unload")
+                                .arg(&plist)
+                                .status();
+                            if let Err(e) = std::fs::remove_file(&plist) {
+                                log::warn!(
+                                    "failed to remove legacy LaunchAgent plist {}: {e}",
+                                    plist.display()
+                                );
+                            } else {
+                                log::info!(
+                                    "removed legacy LaunchAgent plist {}",
+                                    plist.display()
+                                );
+                            }
+                        }
+                    }
+                }
+
                 use tauri_plugin_autostart::ManagerExt;
                 if let Ok(s) = sources::load_settings(&app.handle()) {
                     let mgr = app.autolaunch();
