@@ -107,6 +107,34 @@ pub struct IssueUser {
     pub avatar_url: String,
 }
 
+/// A pull request development-linked to an issue (the "Closes #N" / sidebar
+/// relationship that auto-closes the issue on merge). Sourced from GraphQL
+/// `Issue.closedByPullRequestsReferences`.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct LinkedPr {
+    pub number: u64,
+    pub title: String,
+    pub url: String,
+    /// "open" | "closed" | "merged" (lowercased GraphQL PullRequestState).
+    pub state: String,
+    pub is_draft: bool,
+    /// `owner/repo` of the PR — may differ from the issue's repo (cross-repo link).
+    pub repo: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Milestone {
+    #[serde(default)]
+    pub title: String,
+    /// Normalized to the milestone's web URL. REST search returns `html_url`;
+    /// we accept both so the same struct works for REST and GraphQL paths.
+    #[serde(default, alias = "html_url")]
+    pub url: String,
+    /// ISO-8601 due date, if set.
+    #[serde(default)]
+    pub due_on: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Issue {
     pub id: u64,
@@ -125,6 +153,10 @@ pub struct Issue {
     pub updated_at: String,
     pub created_at: String,
     pub pull_request: Option<serde_json::Value>,
+    #[serde(default)]
+    pub linked_prs: Vec<LinkedPr>,
+    #[serde(default)]
+    pub milestone: Option<Milestone>,
 }
 
 #[derive(Debug, Deserialize)]

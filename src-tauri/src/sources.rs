@@ -94,6 +94,9 @@ pub struct Settings {
     pub launch_at_login: bool,
     #[serde(default = "default_window_size")]
     pub window_size: String,
+    /// Row density preset: "compact" | "default" | "comfortable".
+    #[serde(default = "default_row_density")]
+    pub row_density: String,
 }
 
 fn default_poll_secs() -> u64 {
@@ -101,6 +104,9 @@ fn default_poll_secs() -> u64 {
 }
 fn default_window_size() -> String {
     "large".to_string()
+}
+fn default_row_density() -> String {
+    "default".to_string()
 }
 
 /// Resolve a size-preset name to (width, height) in logical pixels. Unknown

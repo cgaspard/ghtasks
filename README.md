@@ -10,9 +10,46 @@ so one app can drive your personal todos, work tasks, and PR review queue.
 - Multi-repo Sources with per-Source enable/notify/color
 - Native filters via GitHub search syntax (including the new issue types)
 - Create / complete / open issues inline
+- **Linked-PR indicators** — see the pull request that closes an issue at a
+  glance, colored by state (open / merged / closed), one click to open it
+- **Milestone pills** — surface the milestone an issue belongs to
+- **Row density** — Compact / Default / Comfortable, switchable in Settings
 - Desktop notifications when new matching issues appear
 - Mobile (iOS/Android) via Tauri mobile — planned
 - Real-time via a GitHub App webhook relay — planned
+
+## Row layout & density
+
+Each row leads with the title and a color-coded **status** tag, then a metadata
+line (linked PR · repo · number · time), then labels and milestone. A thin
+status-color stripe runs down the left edge.
+
+Pick the spacing that fits your board in **Settings → General → Row density**:
+
+| Preset | Layout |
+|---|---|
+| Compact | 2 rows; labels fold inline, truncated. Most items per screen. |
+| Default | 3 rows; the metadata line never wraps, labels on their own line. |
+| Comfortable | 3 rows, same structure with larger type and more padding. |
+
+![Projects tab — Default density](docs/design/app-projects-default.png)
+
+See [docs/design/](docs/design/) for the Compact / Comfortable renders and the
+design rationale.
+
+## Linked PRs & milestones
+
+Every issue row shows the pull request(s) **development-linked** to it — the
+`Closes #123` / sidebar relationship that auto-closes the issue on merge — as
+colored `PR #N` text (green = open, purple = merged, red = closed; draft PRs are
+muted). If the issue belongs to a milestone, a milestone pill sits on the labels
+line. Click either to open it in your browser. Both appear on the **Projects**
+and **Issues** tabs.
+
+On the Projects tab the linked-PR/milestone data piggybacks on the existing
+Projects v2 GraphQL query (`closedByPullRequestsReferences` + `milestone`) — no
+extra round trip. The Issues tab fills it in with a single batched GraphQL query
+after the REST issue search, since REST exposes no linked-PR field.
 
 ## Develop
 
@@ -48,9 +85,11 @@ src/                    Svelte frontend
   lib/api.ts            Typed wrapper around Tauri commands
   lib/stores.ts         Svelte stores (auth, sources, issues)
   lib/components/       UI components
+    LinkedBadges.svelte Linked-PR + milestone badges (shared by both lists)
 src-tauri/src/
   auth.rs               Device flow + keychain
-  github.rs             GitHub REST client
+  github.rs             GitHub REST client + Issue/LinkedPr/Milestone shapes
+  projects.rs           Projects v2 GraphQL + batched linked-PR enrichment
   sources.rs            Source + Settings persistence
   commands.rs           Tauri command surface
   tray.rs               Menu bar / system tray

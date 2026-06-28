@@ -3,6 +3,7 @@ import type {
   AuthStatus,
   Issue,
   ProjectFetchResult,
+  RowDensity,
   Source,
   SourceResult,
 } from "./api";
@@ -194,6 +195,11 @@ export const settingsSection = persistent<"general" | "sources">(
   "settingsSection",
   "general",
 );
+
+/** Row density for the issue/project lists. Persisted so the next cold launch
+ * paints at the right density before settings load from the backend; App.svelte
+ * re-hydrates it from getSettings() to stay authoritative. */
+export const rowDensity = persistent<RowDensity>("rowDensity", "default");
 
 /** Transient (not persisted) pointer for deep-links from list CTAs. When
  * non-null, the Sources editor auto-opens the matching new-source form on

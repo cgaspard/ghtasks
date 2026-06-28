@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GH Tasks — G×F·4 density scale</title>
+<style>
+  :root {
+    --bg: #0f1116; --bg-elev: #171a21; --bg-hover: #1f232c; --border: #2a2f3a;
+    --text: #e6e6e6; --text-dim: #9aa0ac; --accent: #4f8cff;
+    --st-prog: #d2a106; --st-test: #db6d28; --st-done: #2ea043;
+    --pr-open: #3fb950; --pr-merged: #a371f7;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #07080b; color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; padding: 28px; }
+  h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: var(--text-dim); font-size: 13px; margin: 0 0 22px; max-width: 900px; line-height: 1.5; }
+  .sub b { color: #c7ccd6; }
+  /* Panels are pinned to the REAL app popover width (360px content) so wrap behavior is honest. */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, 372px); gap: 22px; align-items: start; }
+  .panel { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; width: 372px; }
+  .panel-head { padding: 11px 14px; border-bottom: 1px solid var(--border); background: linear-gradient(180deg, #11141a, #0f1116); }
+  .panel-head .name { font-size: 13px; font-weight: 600; }
+  .panel-head .desc { font-size: 11px; color: var(--text-dim); margin-top: 3px; line-height: 1.45; }
+  .panel-head .lvl { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+  .panel-head .tag { font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--accent); }
+  .bar { height:4px; width:88px; border-radius:2px; background:linear-gradient(90deg,#4f8cff,#2b4a84); position:relative; }
+  .bar::after { content:""; position:absolute; top:-2px; width:8px; height:8px; border-radius:50%; background:#cfe0ff; }
+  .b1::after{left:0%}.b2::after{left:13%}.b3::after{left:27%}.b4::after{left:41%}.b5::after{left:55%}.b6::after{left:69%}.b7::after{left:83%}.b8::after{left:96%}
+  .scale-word { font-size:10px; color: var(--text-dim); }
+  ul.issues { list-style: none; margin: 0; padding: 0; }
+
+  /* ---- shared row tokens ---- */
+  .issue { position: relative; border-bottom: 1px solid var(--border); }
+  .issue::before { content:""; position:absolute; left:0; top:0; bottom:0; width:2px; background:var(--st-prog); }
+  .issue.test::before { background:var(--st-test); }
+  .issue.done::before { background:var(--st-done); }
+  .issue:hover { background: var(--bg-elev); }
+  .row1 { display:flex; align-items:center; gap:8px; }
+  .title { color:var(--text); font-weight:500; flex:1 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .right { display:flex; align-items:center; gap:8px; flex:0 0 auto; }
+  .sttag { text-transform:uppercase; letter-spacing:.055em; font-weight:700; color:#c7a93f; white-space:nowrap; }
+  .sttag.done { color:#54b96a; }
+  .repo-num { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; opacity:.8; }
+  .labels-text { color:#aab1bd; }
+  .sep { opacity:.45; }
+  /* PR: no pill — color alone makes it stand out against the dim metadata. */
+  .pr { display:inline-flex; align-items:center; gap:4px; flex:0 0 auto; font-weight:600; white-space:nowrap; color:var(--pr-open); }
+  .pr.merged { color:var(--pr-merged); }
+  .pr svg { width:11px; height:11px; fill:currentColor; }
+  .row2 { display:flex; align-items:center; color:var(--text-dim); }
+
+  /* =========================================================
+     Density levels. Each scopes type size / padding / line-2 behavior.
+     Line-2 wrap is the key axis:
+       - NOWRAP (truncate)  = compact, guaranteed single line 2
+       - WRAP (allowed)     = comfy, may use a 3rd line
+     ========================================================= */
+
+  /* D1 — Ultra compact: everything on ONE physical line (title truncates, meta inline-collapsed) */
+  .d1 .issue { padding: 5px 12px 5px 14px; }
+  .d1 .oneline { display:flex; align-items:center; gap:8px; }
+  .d1 .title { font-size:12.5px; }
+  .d1 .sttag { font-size:8.5px; }
+  .d1 .pr { font-size:9px; padding:0 6px 0 5px; }
+  .d1 .num { font-family: ui-monospace, Menlo, monospace; font-size:10px; color:var(--text-dim); flex:0 0 auto; }
+  .d1 .time { font-size:10px; color:var(--text-dim); flex:0 0 auto; width:30px; text-align:right; }
+
+  /* D2 — Compact two-tier, line2 NOWRAP (truncates) */
+  .d2 .issue { padding: 6px 12px 6px 14px; }
+  .d2 .title { font-size:12.5px; }
+  .d2 .sttag { font-size:8.5px; }
+  .d2 .pr { font-size:9px; padding:0 6px 0 5px; }
+  .d2 .row2 { font-size:10.5px; gap:6px; margin-top:2px; flex-wrap:nowrap; overflow:hidden; }
+  .d2 .row2 .labels-text { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+
+  /* D3 — Snug two-tier, line2 NOWRAP */
+  .d3 .issue { padding: 7px 13px 7px 14px; }
+  .d3 .title { font-size:13px; }
+  .d3 .sttag { font-size:9px; }
+  .d3 .pr { font-size:9.5px; }
+  .d3 .row2 { font-size:11px; gap:7px; margin-top:3px; flex-wrap:nowrap; overflow:hidden; }
+  .d3 .row2 .labels-text { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+
+  /* D4 — Default. Line 2 NEVER wraps (PR · repo · #num · time); labels on line 3. */
+  .d4 .issue { padding: 9px 14px 9px 15px; }
+  .d4 .title { font-size:13.5px; }
+  .d4 .sttag { font-size:9.5px; }
+  .d4 .pr { font-size:10px; }
+  .d4 .row2 { font-size:11px; gap:8px; margin-top:4px; flex-wrap:nowrap; overflow:hidden; }
+  .d4 .row3 { font-size:11px; margin-top:3px; color:#aab1bd; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  /* D5 — Default, line2 MAY WRAP (labels wrap to a 3rd line when long) */
+  .d5 .issue { padding: 9px 14px 9px 15px; }
+  .d5 .title { font-size:13.5px; }
+  .d5 .sttag { font-size:9.5px; }
+  .d5 .pr { font-size:10px; }
+  .d5 .row2 { font-size:11px; gap:4px 8px; margin-top:4px; flex-wrap:wrap; }
+
+  /* D6 — Relaxed: bigger type/padding. Line 2 NEVER wraps (PR · repo · #num · time);
+     labels live on their own line 3. */
+  .d6 .issue { padding: 11px 15px 11px 16px; }
+  .d6 .title { font-size:14px; line-height:1.35; }
+  .d6 .sttag { font-size:9.5px; }
+  .d6 .pr { font-size:10px; }
+  .d6 .row2 { font-size:11.5px; gap:5px 9px; margin-top:5px; flex-wrap:nowrap; overflow:hidden; }
+  .d6 .row3 { font-size:11.5px; margin-top:4px; color:#aab1bd; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  /* D7 — Comfy: title may wrap to 2 lines, generous spacing */
+  .d7 .issue { padding: 13px 16px 13px 17px; }
+  .d7 .title { font-size:14px; line-height:1.4; white-space:normal; }
+  .d7 .row1 { align-items:flex-start; }
+  .d7 .right { margin-top:1px; }
+  .d7 .sttag { font-size:9.5px; }
+  .d7 .pr { font-size:10px; }
+  .d7 .row2 { font-size:11.5px; gap:6px 10px; margin-top:7px; flex-wrap:wrap; }
+
+  /* D8 — Spacious card-ish: max breathing room, wraps freely */
+  .d8 .issue { padding: 16px 18px 16px 19px; }
+  .d8 .issue::before { width:3px; }
+  .d8 .title { font-size:14.5px; line-height:1.4; white-space:normal; font-weight:600; }
+  .d8 .row1 { align-items:flex-start; }
+  .d8 .right { margin-top:2px; }
+  .d8 .sttag { font-size:10px; }
+  .d8 .pr { font-size:10.5px; padding:2px 8px 2px 7px; }
+  .d8 .row2 { font-size:12px; gap:8px 12px; margin-top:10px; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+  <h1>G×F·4 — density scale (compact → comfy)</h1>
+  <p class="sub">Eight levels of the same row, all at the <b>real ~372px popover width</b> so wrap behavior is honest. Each uses a <b>long repo path + 3 labels</b> on #922 to stress-test line 2.<br>
+  The key control is <b>line 2</b>: compact levels <b>truncate</b> it (guaranteed single line, ends in “…”); comfy levels <b>let it wrap</b> to a 3rd line. The title truncates on one line until D7–D8, where it’s allowed to wrap. Pick a min (compact) and max (comfy) and I’ll wire a setting between them.</p>
+
+  <div class="grid">
+
+    <!-- D1 -->
+    <div class="panel d1">
+      <div class="panel-head"><div class="lvl"><span class="tag">D1</span><span class="bar b1"></span><span class="scale-word">most compact</span></div><div class="name">Single physical line</div><div class="desc">Title + status + PR + # + time, ALL on one line. Title truncates hard. Densest possible; line 2 doesn’t exist. Never wraps.</div></div>
+      <ul class="issues">
+        <li class="issue"><div class="oneline"><span class="sttag">In&nbsp;Prog</span><span class="title">Quick Decision Shooter Relocation with Intelligent State Preservation</span><span class="pr"><svg viewBox="0 0 16 16"><path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z"/></svg>#410</span><span class="num">#922</span><span class="time">8m</span></div></li>
+        <li class="issue"><div class="oneline"><span class="sttag">In&nbsp;Prog</span><span class="title">Bug: Jasper Testing – 2026-03-04</span><span class="num">#1083</span><span class="time">5d</span></div></li>
+        <li class="issue done"><div class="oneline"><span class="sttag done">Done</span><span class="title">Emergency Access Token System</span><span class="pr merged"><svg viewBox="0 0 16 16"><path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218ZM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm8.5-4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM5 3.25a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Z"/></svg>#411</span><span class="num">#906</span><span class="time">7mo</span></div></li>
+      </ul>
+    </div>
+
+    <!-- D2 -->
+    <div class="panel d2">
+      <div class="panel-head"><div class="lvl"><span class="tag">D2</span><span class="bar b2"></span><span class="scale-word">compact</span></div><div class="name">Two-tier, line 2 truncates</div><div class="desc">Small type, tight padding. Line 2 (PR · repo · time · labels) stays on ONE line and truncates. Guaranteed 2 physical lines, never 3.</div></div>
+      <ul class="issues" id="t2"></ul>
+    </div>
+
+    <!-- D3 -->
+    <div class="panel d3">
+      <div class="panel-head"><div class="lvl"><span class="tag">D3</span><span class="bar b3"></span><span class="scale-word">snug</span></div><div class="name">Two-tier, line 2 truncates</div><div class="desc">Slightly larger type/padding than D2. Line 2 still truncates — no third line.</div></div>
+      <ul class="issues" id="t3"></ul>
+    </div>
+
+    <!-- D4 -->
+    <div class="panel d4">
+      <div class="panel-head"><div class="lvl"><span class="tag">D4</span><span class="bar b4"></span><span class="scale-word">default · safe</span></div><div class="name">Default · 3 rows, none wrap</div><div class="desc">The recommended default. Title + status (line 1), PR · repo · # · time (line 2, never wraps), labels (line 3, truncates). A row is ALWAYS exactly three lines — predictable, nothing spills.</div></div>
+      <ul class="issues" id="t4"></ul>
+    </div>
+
+    <!-- D5 -->
+    <div class="panel d5">
+      <div class="panel-head"><div class="lvl"><span class="tag">D5</span><span class="bar b5"></span><span class="scale-word">default · wrap</span></div><div class="name">Default, line 2 may wrap</div><div class="desc">Same size as D4 but line 2 is allowed to wrap to a 3rd line when labels are long — nothing is hidden. See #922 spill below.</div></div>
+      <ul class="issues" id="t5"></ul>
+    </div>
+
+    <!-- D6 -->
+    <div class="panel d6">
+      <div class="panel-head"><div class="lvl"><span class="tag">D6</span><span class="bar b6"></span><span class="scale-word">relaxed</span></div><div class="name">Relaxed · 3 rows, none wrap</div><div class="desc">Like Default but bigger type and more padding. Same 3-row structure: line 2 never wraps, labels get their own line 3. More air between rows.</div></div>
+      <ul class="issues" id="t6"></ul>
+    </div>
+
+    <!-- D7 -->
+    <div class="panel d7">
+      <div class="panel-head"><div class="lvl"><span class="tag">D7</span><span class="bar b7"></span><span class="scale-word">comfy</span></div><div class="name">Comfy, title may wrap</div><div class="desc">Generous spacing; the TITLE is now allowed to wrap to two lines (full titles, nothing truncated), and line 2 wraps too.</div></div>
+      <ul class="issues" id="t7"></ul>
+    </div>
+
+    <!-- D8 -->
+    <div class="panel d8">
+      <div class="panel-head"><div class="lvl"><span class="tag">D8</span><span class="bar b8"></span><span class="scale-word">most comfy</span></div><div class="name">Spacious</div><div class="desc">Max breathing room, heavier title, thicker stripe. Everything wraps freely. Fewest rows per screen; feels premium.</div></div>
+      <ul class="issues" id="t8"></ul>
+    </div>
+
+  </div>
+
+<script>
+  // The three sample rows, shared by D2–D8 (D1 has its own inline single-line markup).
+  const PR_OPEN = '<svg viewBox="0 0 16 16"><path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z"/></svg>';
+  const PR_MERGED = '<svg viewBox="0 0 16 16"><path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218ZM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm8.5-4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM5 3.25a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Z"/></svg>';
+  const rows = `
+    <li class="issue"><div class="row1"><span class="title">Quick Decision Shooter Relocation with Intelligent State Preservation</span><span class="right"><span class="sttag">In Progress</span></span></div><div class="row2"><span class="pr">${PR_OPEN}PR #410</span><span class="sep">·</span><span class="repo-num">safeevac/monorepo #922</span><span class="sep">·</span><span>8m</span><span class="sep">·</span><span class="labels-text">enhancement, Ops, Go Live</span></div></li>
+    <li class="issue"><div class="row1"><span class="title">Bug: Jasper Testing – 2026-03-04</span><span class="right"><span class="sttag">In Progress</span></span></div><div class="row2"><span class="repo-num">safeevac/monorepo #1083</span><span class="sep">·</span><span>5d</span><span class="sep">·</span><span class="labels-text">bug, priority high</span></div></li>
+    <li class="issue done"><div class="row1"><span class="title">Emergency Access Token System</span><span class="right"><span class="sttag done">Done</span></span></div><div class="row2"><span class="pr merged">${PR_MERGED}PR #411</span><span class="sep">·</span><span class="repo-num">safeevac/monorepo #906</span><span class="sep">·</span><span>11/16/25</span><span class="sep">·</span><span class="labels-text">enhancement, task</span></div></li>`;
+
+  // 3-row form: line 2 is PR · repo · #num · time (never wraps); labels move to line 3.
+  const rows3 = `
+    <li class="issue"><div class="row1"><span class="title">Quick Decision Shooter Relocation with Intelligent State Preservation</span><span class="right"><span class="sttag">In Progress</span></span></div><div class="row2"><span class="pr">${PR_OPEN}PR #410</span><span class="sep">·</span><span class="repo-num">safeevac/monorepo #922</span><span class="sep">·</span><span>8m</span></div><div class="row3">enhancement, Ops, Go Live</div></li>
+    <li class="issue"><div class="row1"><span class="title">Bug: Jasper Testing – 2026-03-04</span><span class="right"><span class="sttag">In Progress</span></span></div><div class="row2"><span class="repo-num">safeevac/monorepo #1083</span><span class="sep">·</span><span>5d</span></div><div class="row3">bug, priority high</div></li>
+    <li class="issue done"><div class="row1"><span class="title">Emergency Access Token System</span><span class="right"><span class="sttag done">Done</span></span></div><div class="row2"><span class="pr merged">${PR_MERGED}PR #411</span><span class="sep">·</span><span class="repo-num">safeevac/monorepo #906</span><span class="sep">·</span><span>11/16/25</span></div><div class="row3">enhancement, task</div></li>`;
+  ['t2','t3','t5','t7','t8'].forEach(id => document.getElementById(id).innerHTML = rows);
+  ['t4','t6'].forEach(id => document.getElementById(id).innerHTML = rows3);
+</script>
+</body>
+</html>

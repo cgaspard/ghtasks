@@ -299,6 +299,10 @@ query ProjectItems($id: ID!, $after: String, $q: String) {
               repository { nameWithOwner }
               assignees(first: 10) { nodes { login avatarUrl } }
               labels(first: 5) { nodes { name color } }
+              milestone { title url dueOn }
+              closedByPullRequestsReferences(first: 5, includeClosedPrs: true) {
+                nodes { number title url state isDraft repository { nameWithOwner } }
+              }
             }
           }
           fieldValues(first: 30) {
@@ -980,6 +984,128 @@ fn format_number(n: f64) -> String {
     }
 }
 
+/// Parse the `closedByPullRequestsReferences.nodes` array of a GraphQL Issue
+/// content node into our `LinkedPr` shape. Shared by the project-items path and
+/// the REST-issue enrichment path.
+fn parse_linked_prs(content: &Value) -> Vec<crate::github::LinkedPr> {
+    content
+        .pointer("/closedByPullRequestsReferences/nodes")
+        .and_then(|v| v.as_array())
+        .map(|nodes| {
+            nodes
+                .iter()
+                .filter_map(|n| {
+                    Some(crate::github::LinkedPr {
+                        number: n.get("number")?.as_u64()?,
+                        title: n.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                        url: n.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                        state: n
+                            .get("state")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("OPEN")
+                            .to_lowercase(),
+                        is_draft: n.get("isDraft").and_then(|v| v.as_bool()).unwrap_or(false),
+                        repo: n
+                            .pointer("/repository/nameWithOwner")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Parse the `milestone` object of a GraphQL Issue content node.
+fn parse_milestone(content: &Value) -> Option<crate::github::Milestone> {
+    let m = content.get("milestone")?;
+    if m.is_null() {
+        return None;
+    }
+    Some(crate::github::Milestone {
+        title: m.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        url: m.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        due_on: m
+            .get("dueOn")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string()),
+    })
+}
+
+/// Linked-PR + milestone data for one issue, keyed by `owner/repo#number`.
+pub type IssueEnrichment = (Vec<crate::github::LinkedPr>, Option<crate::github::Milestone>);
+
+/// One issue to enrich: its repo (`owner/name`) and number.
+pub struct EnrichTarget {
+    pub owner: String,
+    pub name: String,
+    pub number: u64,
+}
+
+/// Batch-fetch linked PRs + milestone for a set of issues in ONE aliased
+/// GraphQL query (the REST issue-search path has no equivalent fields). Returns
+/// a map from `owner/repo#number` → (linked PRs, milestone). Issues with no
+/// linked PRs and no milestone are simply absent from the map.
+///
+/// Aliases each issue as `i0`, `i1`, … so a single round trip covers the whole
+/// Issues tab regardless of how many repo sources are configured.
+pub async fn enrich_issues(
+    client: &reqwest::Client,
+    token: &str,
+    targets: &[EnrichTarget],
+) -> Result<std::collections::HashMap<String, IssueEnrichment>> {
+    let mut out = std::collections::HashMap::new();
+    if targets.is_empty() {
+        return Ok(out);
+    }
+
+    // GitHub caps a query at 500k nodes; chunk defensively well under that.
+    for chunk in targets.chunks(50) {
+        let mut selections = String::new();
+        let mut variables = serde_json::Map::new();
+        for (i, t) in chunk.iter().enumerate() {
+            selections.push_str(&format!(
+                "  i{i}: repository(owner: $o{i}, name: $n{i}) {{ issue(number: $num{i}) {{ \
+                    milestone {{ title url dueOn }} \
+                    closedByPullRequestsReferences(first: 5, includeClosedPrs: true) {{ \
+                      nodes {{ number title url state isDraft repository {{ nameWithOwner }} }} \
+                    }} }} }}\n"
+            ));
+            variables.insert(format!("o{i}"), json!(t.owner));
+            variables.insert(format!("n{i}"), json!(t.name));
+            variables.insert(format!("num{i}"), json!(t.number));
+        }
+        let mut header = String::from("query EnrichIssues(");
+        for i in 0..chunk.len() {
+            if i > 0 {
+                header.push_str(", ");
+            }
+            header.push_str(&format!("$o{i}: String!, $n{i}: String!, $num{i}: Int!"));
+        }
+        header.push_str(") {\n");
+        let query = format!("{header}{selections}}}");
+
+        let data: Value = graphql(client, token, &query, Value::Object(variables)).await?;
+        for (i, t) in chunk.iter().enumerate() {
+            let Some(issue) = data.pointer(&format!("/i{i}/issue")) else {
+                continue;
+            };
+            if issue.is_null() {
+                continue;
+            }
+            let prs = parse_linked_prs(issue);
+            let milestone = parse_milestone(issue);
+            if prs.is_empty() && milestone.is_none() {
+                continue;
+            }
+            out.insert(format!("{}/{}#{}", t.owner, t.name, t.number), (prs, milestone));
+        }
+    }
+    Ok(out)
+}
+
 /// GraphQL Issue shape → reuse the REST Issue struct for the frontend. Fill
 /// missing-from-GraphQL fields with sensible defaults.
 fn parse_graphql_issue(content: &Value, repo: &str) -> Option<crate::github::Issue> {
@@ -1093,6 +1219,8 @@ fn parse_graphql_issue(content: &Value, repo: &str) -> Option<crate::github::Iss
         updated_at,
         created_at,
         pull_request: None,
+        linked_prs: parse_linked_prs(content),
+        milestone: parse_milestone(content),
     })
 }
 

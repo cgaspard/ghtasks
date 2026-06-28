@@ -15,9 +15,19 @@
     valueColor: string | null | undefined;
     options: Option[];
     onPick: (optionId: string | null) => void;
+    /** "pill" = tinted rounded pill (legacy); "tag" = flat uppercase colored
+     * text (G×F·4 row design). Both still open the same picker menu. */
+    variant?: "pill" | "tag";
   }
 
-  let { value, valueName, valueColor, options, onPick }: Props = $props();
+  let {
+    value,
+    valueName,
+    valueColor,
+    options,
+    onPick,
+    variant = "pill",
+  }: Props = $props();
 
   let open = $state(false);
   let root: HTMLDivElement | undefined = $state();
@@ -36,18 +46,32 @@
 </script>
 
 <div class="picker" bind:this={root}>
-  <button
-    type="button"
-    class="pill"
-    class:unset={!value}
-    onclick={() => (open = !open)}
-    style="--status-solid: {c.solid}; --status-tint: {c.tint}; --status-ink: {c.ink};"
-    title={valueName ?? "No Status"}
-  >
-    <span class="dot" aria-hidden="true"></span>
-    <span class="label">{valueName ?? "No Status"}</span>
-    <span class="caret">▾</span>
-  </button>
+  {#if variant === "tag"}
+    <button
+      type="button"
+      class="tag"
+      class:unset={!value}
+      onclick={() => (open = !open)}
+      style="--status-solid: {c.solid};"
+      title={valueName ?? "No Status"}
+    >
+      <span class="tag-label">{valueName ?? "No Status"}</span>
+      <span class="caret">▾</span>
+    </button>
+  {:else}
+    <button
+      type="button"
+      class="pill"
+      class:unset={!value}
+      onclick={() => (open = !open)}
+      style="--status-solid: {c.solid}; --status-tint: {c.tint}; --status-ink: {c.ink};"
+      title={valueName ?? "No Status"}
+    >
+      <span class="dot" aria-hidden="true"></span>
+      <span class="label">{valueName ?? "No Status"}</span>
+      <span class="caret">▾</span>
+    </button>
+  {/if}
 
   {#if open}
     <div class="menu" role="menu">
@@ -113,6 +137,31 @@
   }
   .pill.unset {
     color: var(--text-dim);
+  }
+  .tag {
+    all: unset;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--status-solid);
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.055em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .tag.unset {
+    color: var(--text-dim);
+  }
+  .tag .tag-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 110px;
+  }
+  .tag:hover {
+    text-decoration: underline;
   }
   .dot {
     width: 8px;

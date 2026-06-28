@@ -1,6 +1,7 @@
 <script lang="ts">
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { api, repoFullName, type Issue } from "../api";
+  import LinkedBadges from "./LinkedBadges.svelte";
   import {
     sourceResults,
     sources,
@@ -15,6 +16,7 @@
     settingsSection,
     settingsFocus,
     appView,
+    rowDensity,
   } from "../stores";
 
   let filter = $state("");
@@ -227,7 +229,7 @@
       {/if}
     </div>
   {:else}
-    <ul class="issues">
+    <ul class="issues" data-density={$rowDensity}>
       {#each filtered as { issue, sourceId } (issue.node_id)}
         {@const src = $sources.find((s) => s.id === sourceId)}
         <li class="issue" class:confirming={confirmingId === issue.node_id}>
@@ -256,39 +258,62 @@
               title="Close issue"
               onclick={() => askClose(issue)}>○</button
             >
-            <div class="main">
-              <button class="title" onclick={() => open(issue)}>
-                {issue.title}
-              </button>
-              <div class="meta">
-                <span class="repo"
-                  >{repoFullName(issue) ||
-                    (src && src.kind === "repo" ? src.repo : "")}</span
+            <div class="body">
+              <div class="row1">
+                <button class="title" onclick={() => open(issue)}>
+                  {issue.title}
+                </button>
+                <button
+                  class="drill"
+                  title="View issue"
+                  aria-label="View issue"
+                  onclick={() => drillIn(issue)}
                 >
-                <span class="num">#{issue.number}</span>
-                <span class="time">· {relTime(issue.updated_at)}</span>
-                {#each issue.labels.slice(0, 3) as l}
-                  <span
-                    class="label"
-                    style="background:#{l.color}22;border-color:#{l.color};color:#{l.color}"
-                    >{l.name}</span
-                  >
-                {/each}
+                  <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"
+                    />
+                  </svg>
+                </button>
               </div>
+              <div class="row2">
+                <LinkedBadges {issue} />
+                {#if (issue.linked_prs?.length ?? 0) > 0}<span class="sep"
+                    >·</span
+                  >{/if}
+                <span class="repo-num"
+                  ><span class="repo"
+                    >{repoFullName(issue) ||
+                      (src && src.kind === "repo" ? src.repo : "")}</span
+                  ><span class="num">#{issue.number}</span></span
+                >
+                <span class="sep">·</span>
+                <span class="time">{relTime(issue.updated_at)}</span>
+                {#if issue.labels.length > 0}
+                  <span class="sep compact-only">·</span>
+                  <span class="row2-labels compact-only"
+                    >{issue.labels.map((l) => l.name).join(", ")}</span
+                  >
+                {/if}
+              </div>
+              {#if issue.labels.length > 0 || issue.milestone}
+                <div class="row3">
+                  {#if issue.milestone}
+                    <button
+                      class="milestone"
+                      title={`Milestone: ${issue.milestone.title}`}
+                      onclick={() => openUrl(issue.milestone!.url)}
+                    >
+                      {issue.milestone.title}
+                    </button>
+                  {/if}
+                  {#each issue.labels.slice(0, 6) as l}
+                    <span class="label">{l.name}</span>
+                  {/each}
+                </div>
+              {/if}
             </div>
-            <button
-              class="drill"
-              title="View issue"
-              aria-label="View issue"
-              onclick={() => drillIn(issue)}
-            >
-              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-                <path
-                  fill="currentColor"
-                  d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"
-                />
-              </svg>
-            </button>
           {/if}
         </li>
       {/each}
@@ -450,8 +475,8 @@
   }
   .issue {
     display: flex;
-    gap: 6px;
-    padding: 8px 10px;
+    gap: 8px;
+    align-items: flex-start;
     border-bottom: 1px solid var(--border);
   }
   .issue:hover {
@@ -459,6 +484,7 @@
   }
   .issue.confirming {
     background: rgba(229, 72, 77, 0.08);
+    padding: 8px 10px;
   }
   .confirm {
     flex: 1;
@@ -500,6 +526,8 @@
     font-size: 13px;
     color: var(--text-dim);
     background: transparent;
+    flex: 0 0 auto;
+    margin-top: -1px;
   }
   .check:hover {
     color: var(--ok);
@@ -527,35 +555,140 @@
     background: var(--bg-hover);
     color: var(--text);
   }
-  .main {
+  /* ---- G×F·4 row ---- */
+  .body {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .row1 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
   .title {
     all: unset;
     cursor: pointer;
-    display: block;
+    flex: 1 1 auto;
+    min-width: 0;
     color: var(--text);
-    line-height: 1.3;
-    word-break: break-word;
+    font-weight: 500;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .title:hover {
     color: var(--accent);
   }
-  .meta {
+  .row2 {
     display: flex;
-    flex-wrap: wrap;
-    gap: 4px 6px;
     align-items: center;
-    margin-top: 2px;
+    gap: 6px;
     color: var(--text-dim);
-    font-size: 11px;
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
+  .row3 {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: #aab1bd;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sep {
+    opacity: 0.45;
+    flex: 0 0 auto;
+  }
+  .repo-num {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .repo {
+    opacity: 0.85;
+  }
+  .num {
+    margin-left: 4px;
+  }
+  .time {
+    flex: 0 0 auto;
   }
   .label {
-    padding: 1px 6px;
-    border-radius: 999px;
-    font-size: 10px;
-    border: 1px solid;
+    flex: 0 0 auto;
+    color: #aab1bd;
+  }
+  .milestone {
+    all: unset;
+    cursor: pointer;
+    flex: 0 0 auto;
+    color: #8b949e;
+  }
+  .milestone:hover {
+    text-decoration: underline;
+  }
+
+  /* ---- density presets ---- */
+  .issues[data-density="default"] .issue {
+    padding: 9px 12px 9px 4px;
+  }
+  .issues[data-density="default"] .title {
+    font-size: 13.5px;
+  }
+  .issues[data-density="default"] .row2 {
+    font-size: 11px;
+    margin-top: 4px;
+  }
+  .issues[data-density="default"] .row3 {
+    font-size: 11px;
+    margin-top: 3px;
+  }
+
+  .issues[data-density="comfortable"] .issue {
+    padding: 11px 12px 11px 6px;
+  }
+  .issues[data-density="comfortable"] .title {
+    font-size: 14px;
+  }
+  .issues[data-density="comfortable"] .row2 {
+    font-size: 11.5px;
+    margin-top: 5px;
+  }
+  .issues[data-density="comfortable"] .row3 {
+    font-size: 11.5px;
+    margin-top: 4px;
+  }
+
+  .issues[data-density="compact"] .issue {
+    padding: 6px 10px 6px 4px;
+  }
+  .issues[data-density="compact"] .title {
+    font-size: 12.5px;
+  }
+  .issues[data-density="compact"] .row2 {
+    font-size: 10.5px;
+    margin-top: 2px;
+  }
+  .issues[data-density="compact"] .row3 {
+    display: none;
+  }
+  .compact-only {
+    display: none;
+  }
+  .issues[data-density="compact"] .compact-only {
+    display: inline;
+  }
+  .issues[data-density="compact"] .row2-labels {
+    color: #aab1bd;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
   .src-errors {
     padding: 6px 10px;

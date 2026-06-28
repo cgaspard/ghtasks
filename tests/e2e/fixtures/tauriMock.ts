@@ -208,6 +208,7 @@ function installTauriMock(): void {
           poll_interval_secs: 90,
           launch_at_login: false,
           window_size: "default",
+          row_density: "default",
         };
       case "save_settings":
         return null;

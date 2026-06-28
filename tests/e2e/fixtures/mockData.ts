@@ -30,6 +30,7 @@ export const SETTINGS: Settings = {
   poll_interval_secs: 90,
   launch_at_login: false,
   window_size: "default",
+  row_density: "default",
 };
 
 let nodeSeq = 1000;
@@ -59,6 +60,8 @@ export function makeIssue(partial: Partial<Issue> & { number: number; title: str
     updated_at: partial.updated_at ?? "2026-06-20T12:00:00Z",
     created_at: partial.created_at ?? "2026-06-19T12:00:00Z",
     pull_request: partial.pull_request ?? null,
+    linked_prs: partial.linked_prs ?? [],
+    milestone: partial.milestone ?? null,
   };
 }
 
@@ -126,8 +129,9 @@ function projectItem(
   statusName: string | null,
   priorityOptId?: string,
   priorityName?: string,
+  extra?: Partial<Issue>,
 ): ProjectItem {
-  const issue = makeIssue({ number: num, title });
+  const issue = makeIssue({ number: num, title, ...extra });
   const field_values = [];
   if (statusOptId && statusName) {
     field_values.push({
@@ -158,9 +162,42 @@ function projectItem(
 /** A small board with a spread of statuses and issue numbers (incl. 92, 922
  * to exercise the number filter). */
 export const PROJECT_ITEMS: ProjectItem[] = [
-  projectItem(92, "Fix the login flow", "OPT_inprogress", "In Progress", "OPT_p0", "P0"),
+  // #92 carries a linked open PR + a milestone, exercising both badge kinds.
+  projectItem(92, "Fix the login flow", "OPT_inprogress", "In Progress", "OPT_p0", "P0", {
+    labels: [
+      { name: "bug", color: "d73a4a" },
+      { name: "auth", color: "0e8a16" },
+    ],
+    milestone: {
+      title: "v1.0",
+      url: "https://github.com/octocat/hello-world/milestone/1",
+      due_on: "2026-07-31T00:00:00Z",
+    },
+    linked_prs: [
+      {
+        number: 410,
+        title: "Rework the OAuth callback",
+        url: "https://github.com/octocat/hello-world/pull/410",
+        state: "open",
+        is_draft: false,
+        repo: "octocat/hello-world",
+      },
+    ],
+  }),
   projectItem(101, "Add dark mode toggle", "OPT_todo", "Todo", "OPT_p2", "P2"),
-  projectItem(922, "Refactor the sync engine", "OPT_todo", "Todo", "OPT_p1", "P1"),
+  // #922 has a merged PR — the badge should render in the merged (purple) state.
+  projectItem(922, "Refactor the sync engine", "OPT_todo", "Todo", "OPT_p1", "P1", {
+    linked_prs: [
+      {
+        number: 411,
+        title: "Split the sync engine into stages",
+        url: "https://github.com/octocat/hello-world/pull/411",
+        state: "merged",
+        is_draft: false,
+        repo: "octocat/hello-world",
+      },
+    ],
+  }),
   projectItem(150, "Write onboarding docs", "OPT_done", "Done"),
   projectItem(200, "Investigate flaky test in CI", null, null, "OPT_p1", "P1"),
 ];
@@ -176,7 +213,26 @@ export const PROJECT_PAGE_EVENT: ProjectPageEvent = {
 };
 
 export const REPO_ISSUES: Issue[] = [
-  makeIssue({ number: 92, title: "Fix the login flow", labels: [{ name: "bug", color: "d73a4a" }] }),
+  makeIssue({
+    number: 92,
+    title: "Fix the login flow",
+    labels: [{ name: "bug", color: "d73a4a" }],
+    milestone: {
+      title: "v1.0",
+      url: "https://github.com/octocat/hello-world/milestone/1",
+      due_on: "2026-07-31T00:00:00Z",
+    },
+    linked_prs: [
+      {
+        number: 410,
+        title: "Rework the OAuth callback",
+        url: "https://github.com/octocat/hello-world/pull/410",
+        state: "open",
+        is_draft: false,
+        repo: "octocat/hello-world",
+      },
+    ],
+  }),
   makeIssue({ number: 922, title: "Refactor the sync engine", labels: [{ name: "tech-debt", color: "0e8a16" }] }),
   makeIssue({ number: 305, title: "Update the README", labels: [] }),
 ];

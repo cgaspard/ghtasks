@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getVersion } from "@tauri-apps/api/app";
-  import { api, type ProjectPageEvent } from "./lib/api";
+  import { api, resolveRowDensity, type ProjectPageEvent } from "./lib/api";
   import {
     auth,
     sources,
@@ -20,6 +20,7 @@
     appVersion,
     appView,
     updateAvailable,
+    rowDensity,
   } from "./lib/stores";
   import { get } from "svelte/store";
   import Login from "./lib/components/Login.svelte";
@@ -278,6 +279,13 @@
     });
 
     void getVersion().then((v) => ($appVersion = v));
+
+    // Re-hydrate row density from the backend (authoritative); the persistent
+    // store already painted the last-known value on cold launch.
+    void api
+      .getSettings()
+      .then((s) => ($rowDensity = resolveRowDensity(s.row_density)))
+      .catch(() => {});
 
     // Mirror `$updateAvailable` into the macOS tray icon. Swaps to an
     // "octocat with down-arrow notch" silhouette + tooltip when an

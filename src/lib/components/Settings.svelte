@@ -1,9 +1,21 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api, type Repo, type Settings as SettingsT } from "../api";
-  import { lastError, settingsSection } from "../stores";
+  import {
+    api,
+    resolveRowDensity,
+    type Repo,
+    type RowDensity,
+    type Settings as SettingsT,
+  } from "../api";
+  import { lastError, settingsSection, rowDensity } from "../stores";
   import SourceEditor from "./SourceEditor.svelte";
   import Select from "./Select.svelte";
+
+  const DENSITY_OPTIONS: { value: RowDensity; label: string }[] = [
+    { value: "compact", label: "Compact" },
+    { value: "default", label: "Default" },
+    { value: "comfortable", label: "Comfortable" },
+  ];
 
   interface Props {
     onSourcesChanged: () => Promise<void> | void;
@@ -15,6 +27,7 @@
     poll_interval_secs: 90,
     launch_at_login: false,
     window_size: "default",
+    row_density: "default",
   });
   let repos: Repo[] = $state([]);
   let saved = $state(false);
@@ -22,6 +35,10 @@
   onMount(async () => {
     try {
       settings = await api.getSettings();
+      // Normalize a possibly-empty/legacy density value so the control and the
+      // store always hold a valid preset.
+      settings.row_density = resolveRowDensity(settings.row_density);
+      $rowDensity = settings.row_density;
       // Trust the OS state over the stored flag on load — they should match,
       // but autostart may have been disabled out-of-band.
       try {
@@ -46,6 +63,12 @@
     } catch (e) {
       $lastError = String(e);
     }
+  }
+
+  function setDensity(v: RowDensity) {
+    settings.row_density = v;
+    $rowDensity = v; // live-apply to the lists before the save round-trips
+    save();
   }
 
   function toggle(section: "general" | "sources") {
@@ -116,6 +139,21 @@
               save();
             }}
           />
+        </label>
+
+        <label>
+          Row density
+          <div class="seg" role="group" aria-label="Row density">
+            {#each DENSITY_OPTIONS as opt}
+              <button
+                type="button"
+                class="seg-btn"
+                class:active={settings.row_density === opt.value}
+                aria-pressed={settings.row_density === opt.value}
+                onclick={() => setDensity(opt.value)}>{opt.label}</button
+              >
+            {/each}
+          </div>
         </label>
 
         <label>
@@ -255,5 +293,28 @@
   .saved {
     color: var(--ok);
     font-size: 12px;
+  }
+  .seg {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--bg-elev);
+    align-self: flex-start;
+  }
+  .seg-btn {
+    all: unset;
+    cursor: pointer;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-dim);
+  }
+  .seg-btn:hover {
+    color: var(--text);
+  }
+  .seg-btn.active {
+    background: var(--accent);
+    color: white;
   }
 </style>

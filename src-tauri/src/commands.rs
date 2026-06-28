@@ -224,7 +224,68 @@ pub async fn fetch_all(
         }
     }
 
+    // REST issue-search returns milestone but has no linked-PR field. Enrich the
+    // whole tab in ONE batched GraphQL query (issues with neither are skipped).
+    enrich_rest_issues(&state.http, &token, &mut results).await;
+
     Ok(results)
+}
+
+/// Fill `linked_prs` (and overwrite `milestone` with the normalized GraphQL
+/// shape) on REST-fetched issues via one batched GraphQL round trip. Best-effort:
+/// on any error the issues simply keep their REST data and no PR badges show.
+async fn enrich_rest_issues(
+    http: &reqwest::Client,
+    token: &str,
+    results: &mut [SourceResult],
+) {
+    // (source_index, issue_index) → target, so we can write enrichment back.
+    let mut targets: Vec<projects::EnrichTarget> = Vec::new();
+    let mut coords: Vec<(usize, usize)> = Vec::new();
+    for (si, sr) in results.iter().enumerate() {
+        for (ii, issue) in sr.issues.iter().enumerate() {
+            let Some((owner, name)) = repo_owner_name(issue) else {
+                continue;
+            };
+            targets.push(projects::EnrichTarget {
+                owner,
+                name,
+                number: issue.number,
+            });
+            coords.push((si, ii));
+        }
+    }
+    if targets.is_empty() {
+        return;
+    }
+    match projects::enrich_issues(http, token, &targets).await {
+        Ok(map) => {
+            for (idx, target) in targets.iter().enumerate() {
+                let key = format!("{}/{}#{}", target.owner, target.name, target.number);
+                if let Some((prs, milestone)) = map.get(&key) {
+                    let (si, ii) = coords[idx];
+                    let issue = &mut results[si].issues[ii];
+                    issue.linked_prs = prs.clone();
+                    if milestone.is_some() {
+                        issue.milestone = milestone.clone();
+                    }
+                }
+            }
+        }
+        Err(e) => log::warn!("fetch_all: linked-PR enrichment failed: {e}"),
+    }
+}
+
+/// Derive `(owner, name)` from an issue's REST `repository_url`
+/// (`https://api.github.com/repos/owner/name`).
+fn repo_owner_name(issue: &Issue) -> Option<(String, String)> {
+    let url = issue.repository_url.as_deref()?;
+    let tail = url.rsplit("/repos/").next()?;
+    let (owner, name) = tail.split_once('/')?;
+    if owner.is_empty() || name.is_empty() {
+        return None;
+    }
+    Some((owner.to_string(), name.to_string()))
 }
 
 #[tauri::command]

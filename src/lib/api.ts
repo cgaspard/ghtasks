@@ -53,6 +53,24 @@ export interface IssueUser {
   avatar_url: string;
 }
 
+export type PrState = "open" | "closed" | "merged";
+
+export interface LinkedPr {
+  number: number;
+  title: string;
+  url: string;
+  state: PrState;
+  is_draft: boolean;
+  /** `owner/repo` of the PR — may differ from the issue's repo. */
+  repo: string;
+}
+
+export interface Milestone {
+  title: string;
+  url: string;
+  due_on: string | null;
+}
+
 export interface Issue {
   id: number;
   node_id: string;
@@ -69,6 +87,8 @@ export interface Issue {
   updated_at: string;
   created_at: string;
   pull_request: unknown | null;
+  linked_prs: LinkedPr[];
+  milestone: Milestone | null;
 }
 
 export type SourceKind =
@@ -255,11 +275,19 @@ export interface UpdateCheckResult {
   body: string | null;
 }
 
+export type RowDensity = "compact" | "default" | "comfortable";
+
 export interface Settings {
   default_repo: string | null;
   poll_interval_secs: number;
   launch_at_login: boolean;
   window_size: "compact" | "default" | "tall" | "wide" | "large";
+  row_density: RowDensity;
+}
+
+/** Resolve a possibly-empty/unknown density value to a valid preset. */
+export function resolveRowDensity(value: string | null | undefined): RowDensity {
+  return value === "compact" || value === "comfortable" ? value : "default";
 }
 
 export const api = {

@@ -23,10 +23,12 @@
     settingsSection,
     settingsFocus,
     appView,
+    rowDensity,
   } from "../stores";
   import FilterPicker from "./FilterPicker.svelte";
   import StatusPicker from "./StatusPicker.svelte";
   import Select from "./Select.svelte";
+  import LinkedBadges from "./LinkedBadges.svelte";
   import { statusColor } from "../statusColor";
 
   const NO_STATUS = "__none__";
@@ -565,83 +567,101 @@
       {/if}
     </div>
   {:else}
-    <ul class="issues">
+    <ul class="issues" data-density={$rowDensity}>
       {#each filtered as { sourceId, item, statusField, statusValue, statusName, statusColor: statusColorRaw } (item.item_id)}
         {@const c = statusColor(statusColorRaw)}
         <li
           class="issue"
           style="--status-solid: {c.solid}; --status-tint: {c.tint}; --status-ink: {c.ink};"
         >
-          <div class="main">
+          <div class="row1">
             <button class="title" onclick={() => open(item.issue)}>
               {item.issue.title}
             </button>
-            <div class="meta">
-              <span class="repo-num"
-                ><span class="repo">{item.repo}</span><span class="num"
-                  >#{item.issue.number}</span
-                ></span
-              >
-              <span class="time">{relTime(item.issue.updated_at)}</span>
-              {#if item.issue.labels.length > 0}
-                <span class="meta-dot">·</span>
-                {#each item.issue.labels.slice(0, 4) as l}
-                  <span
-                    class="label"
-                    style="background:#{l.color}22;border-color:#{l.color}55;color:#{l.color}"
-                    >{l.name}</span
-                  >
-                {/each}
+            <div class="row1-right">
+              <div class="tray">
+                <button
+                  class="tray-btn"
+                  title="Add comment"
+                  onclick={() => {
+                    commentingId =
+                      commentingId === item.item_id ? null : item.item_id;
+                    commentText = "";
+                  }}
+                  aria-label="Add comment">💬</button
+                >
+                <button
+                  class="tray-btn"
+                  title="Open on GitHub"
+                  onclick={() => open(item.issue)}
+                  aria-label="Open on GitHub">↗</button
+                >
+                <button
+                  class="tray-btn drill"
+                  title="View issue"
+                  onclick={() => drillIn(item)}
+                  aria-label="View issue"
+                >
+                  <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"
+                    />
+                  </svg>
+                </button>
+              </div>
+              {#if statusField}
+                <StatusPicker
+                  variant="tag"
+                  value={statusValue}
+                  valueName={statusName}
+                  valueColor={statusColorRaw}
+                  options={statusField.options.map((o) => ({
+                    id: o.id,
+                    name: o.name,
+                    color: o.color,
+                  }))}
+                  onPick={(optId) =>
+                    changeStatus(sourceId, item, statusField, optId)}
+                />
               {/if}
             </div>
           </div>
-          <div class="right">
-            {#if statusField}
-              <StatusPicker
-                value={statusValue}
-                valueName={statusName}
-                valueColor={statusColorRaw}
-                options={statusField.options.map((o) => ({
-                  id: o.id,
-                  name: o.name,
-                  color: o.color,
-                }))}
-                onPick={(optId) =>
-                  changeStatus(sourceId, item, statusField, optId)}
-              />
+          <div class="row2">
+            <LinkedBadges issue={item.issue} />
+            {#if (item.issue.linked_prs?.length ?? 0) > 0}<span class="sep"
+                >·</span
+              >{/if}
+            <span class="repo-num"
+              ><span class="repo">{item.repo}</span><span class="num"
+                >#{item.issue.number}</span
+              ></span
+            >
+            <span class="sep">·</span>
+            <span class="time">{relTime(item.issue.updated_at)}</span>
+            {#if item.issue.labels.length > 0}
+              <span class="sep compact-only">·</span>
+              <span class="row2-labels compact-only"
+                >{item.issue.labels.map((l) => l.name).join(", ")}</span
+              >
             {/if}
-            <div class="tray">
-              <button
-                class="tray-btn"
-                title="Add comment"
-                onclick={() => {
-                  commentingId =
-                    commentingId === item.item_id ? null : item.item_id;
-                  commentText = "";
-                }}
-                aria-label="Add comment">💬</button
-              >
-              <button
-                class="tray-btn"
-                title="Open on GitHub"
-                onclick={() => open(item.issue)}
-                aria-label="Open on GitHub">↗</button
-              >
-              <button
-                class="tray-btn drill"
-                title="View issue"
-                onclick={() => drillIn(item)}
-                aria-label="View issue"
-              >
-                <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-                  <path
-                    fill="currentColor"
-                    d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"
-                  />
-                </svg>
-              </button>
-            </div>
           </div>
+          {#if item.issue.labels.length > 0 || item.issue.milestone}
+            <div class="row3">
+              {#if item.issue.milestone}
+                <button
+                  class="milestone"
+                  title={`Milestone: ${item.issue.milestone.title}`}
+                  onclick={() => openUrl(item.issue.milestone!.url)}
+                >
+                  {item.issue.milestone.title}
+                </button>
+              {/if}
+              {#each item.issue.labels.slice(0, 6) as l}
+                <span class="label">{l.name}</span>
+              {/each}
+            </div>
+          {/if}
           {#if commentingId === item.item_id}
             <div class="comment-box">
               <textarea
@@ -823,77 +843,162 @@
     min-height: 0;
     overflow: auto;
   }
+  /* ---- G×F·4 row ---- */
   .issue {
     position: relative;
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 8px 10px;
-    padding: 10px 12px 10px 14px;
     border-bottom: 1px solid var(--border);
-    border-left: 3px solid transparent;
-    transition: background 0.12s, border-left-color 0.12s;
+    transition: background 0.12s;
+  }
+  /* Persistent thin status-color stripe down the left edge. */
+  .issue::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--status-solid);
   }
   .issue:hover {
     background: var(--bg-elev);
-    border-left-color: var(--status-solid);
   }
-  .main {
-    min-width: 0;
+  .row1 {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .right {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 6px;
+    align-items: center;
+    gap: 8px;
   }
   .title {
     all: unset;
     cursor: pointer;
-    display: block;
+    flex: 1 1 auto;
+    min-width: 0;
     color: var(--text);
-    font-size: 14px;
     font-weight: 500;
-    line-height: 1.3;
-    word-break: break-word;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .title:hover {
     color: var(--accent);
   }
-  .meta {
+  .row1-right {
     display: flex;
-    flex-wrap: wrap;
-    gap: 4px 6px;
     align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+  }
+  .row2 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     color: var(--text-dim);
-    font-size: 11px;
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
+  .row3 {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: #aab1bd;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sep {
+    opacity: 0.45;
+    flex: 0 0 auto;
   }
   .repo-num {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
   .repo {
     opacity: 0.85;
   }
   .num {
     margin-left: 4px;
-    color: var(--text-dim);
   }
   .time {
-    color: var(--text-dim);
-  }
-  .meta-dot {
-    opacity: 0.5;
+    flex: 0 0 auto;
   }
   .label {
-    padding: 1px 7px;
-    border-radius: 999px;
-    font-size: 10px;
-    font-weight: 500;
-    border: 1px solid;
-    line-height: 1.5;
+    flex: 0 0 auto;
+    color: #aab1bd;
+  }
+  .milestone {
+    all: unset;
+    cursor: pointer;
+    flex: 0 0 auto;
+    color: #8b949e;
+  }
+  .milestone:hover {
+    text-decoration: underline;
+  }
+
+  /* ---- density presets (data-density on the <ul>) ---- */
+  /* Default (D4): 3 rows, none wrap. */
+  .issues[data-density="default"] .issue {
+    padding: 9px 14px 9px 15px;
+  }
+  .issues[data-density="default"] .title {
+    font-size: 13.5px;
+  }
+  .issues[data-density="default"] .row2 {
+    font-size: 11px;
+    margin-top: 4px;
+  }
+  .issues[data-density="default"] .row3 {
+    font-size: 11px;
+    margin-top: 3px;
+  }
+
+  /* Comfortable (D6): bigger type + padding, same 3-row structure. */
+  .issues[data-density="comfortable"] .issue {
+    padding: 11px 15px 11px 16px;
+  }
+  .issues[data-density="comfortable"] .title {
+    font-size: 14px;
+  }
+  .issues[data-density="comfortable"] .row2 {
+    font-size: 11.5px;
+    margin-top: 5px;
+  }
+  .issues[data-density="comfortable"] .row3 {
+    font-size: 11.5px;
+    margin-top: 4px;
+  }
+
+  /* Compact (D2): 2 rows — labels fold up onto row2 inline and truncate. */
+  .issues[data-density="compact"] .issue {
+    padding: 6px 12px 6px 14px;
+  }
+  .issues[data-density="compact"] .title {
+    font-size: 12.5px;
+  }
+  .issues[data-density="compact"] .row2 {
+    font-size: 10.5px;
+    margin-top: 2px;
+  }
+  .issues[data-density="compact"] .row3 {
+    display: none;
+  }
+  /* `.compact-only` (inline labels on row2) shows ONLY in compact mode. */
+  .compact-only {
+    display: none;
+  }
+  .issues[data-density="compact"] .compact-only {
+    display: inline;
+  }
+  .issues[data-density="compact"] .row2-labels {
+    color: #aab1bd;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
   .tray {
     display: flex;
