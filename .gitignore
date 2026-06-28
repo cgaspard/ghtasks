@@ -32,3 +32,9 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Playwright / tests
+test-results
+playwright-report
+.playwright
+blob-report

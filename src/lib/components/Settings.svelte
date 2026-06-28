@@ -125,7 +125,15 @@
             min="30"
             max="3600"
             bind:value={settings.poll_interval_secs}
-            onchange={save}
+            onchange={(e) => {
+              // Guard against an empty/NaN field: clamp to [30, 3600] and
+              // round so the Rust u64 field always gets a valid integer.
+              const n = Number(e.currentTarget.value);
+              settings.poll_interval_secs = Number.isFinite(n)
+                ? Math.min(3600, Math.max(30, Math.round(n)))
+                : 90;
+              save();
+            }}
           />
         </label>
 

@@ -41,7 +41,11 @@ const PURIFY_CONFIG: Config = {
   // Refuse any attribute that looks like an event handler. DOMPurify
   // already strips `on*` by default; this is belt-and-suspenders.
   FORBID_ATTR: ["style"],
-  FORBID_TAGS: ["script", "iframe", "object", "embed", "form", "input", "button", "style", "link", "meta"],
+  // `input` is intentionally NOT forbidden here: it's allowed in ALLOWED_TAGS
+  // for GFM task-list checkboxes and gated by the uponSanitizeElement hook
+  // below (which strips every <input> except disabled checkboxes). Forbidding
+  // it here would win over the hook and drop task-list checkboxes entirely.
+  FORBID_TAGS: ["script", "iframe", "object", "embed", "form", "button", "style", "link", "meta"],
 };
 
 // DOMPurify's default `input` allowance is needed ONLY for GFM task-list

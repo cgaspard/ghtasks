@@ -85,9 +85,12 @@
         : [...current, errored];
     }
 
-    // Reset seen-tracker when a new generation's first page arrives.
+    // Seed a fresh seen-tracker on the first page of this generation's
+    // stream (or if the stored tracker belongs to a different generation).
+    // Keying the reset to is_first as well as the generation avoids a
+    // mid-stream tracker reset contaminating the final-page prune.
     let tracker = seenItemsByGen.get(evt.source_id);
-    if (!tracker || tracker.gen !== gen) {
+    if (!tracker || tracker.gen !== gen || evt.is_first) {
       tracker = { gen, ids: new Set() };
       seenItemsByGen.set(evt.source_id, tracker);
     }
@@ -118,7 +121,7 @@
     // this generation (archived / removed upstream) — but keep any items
     // that we know we just created (the server may not have indexed them
     // into the project's items() list yet).
-    if (evt.is_final) {
+    if (evt.is_final && tracker.gen === gen) {
       pruneRecentlyCreated();
       const recents = get(recentlyCreated);
       mergedItems = mergedItems.filter(

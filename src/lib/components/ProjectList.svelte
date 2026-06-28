@@ -101,7 +101,12 @@
         if (a.statusIndex !== b.statusIndex) {
           return a.statusIndex - b.statusIndex;
         }
-        return a.item.issue.updated_at < b.item.issue.updated_at ? 1 : -1;
+        const at = a.item.issue.updated_at;
+        const bt = b.item.issue.updated_at;
+        if (at !== bt) return at < bt ? 1 : -1;
+        // Deterministic tiebreaker so equal timestamps don't reorder between
+        // renders (a two-valued comparator violates sort's antisymmetry).
+        return a.item.item_id < b.item.item_id ? -1 : 1;
       });
       return out;
     })(),
@@ -190,6 +195,14 @@
     })(),
   );
 
+  /** Lowercased name of the active custom-filter field, resolved by id.
+   * Used so item matching (which is name-based) survives a stale field id. */
+  const customFieldFilterName = $derived(
+    customFilterableFields
+      .find((f) => f.id === $customFieldFilter.fieldId)
+      ?.name.toLowerCase() ?? null,
+  );
+
   const customFieldOptions = $derived(
     (() => {
       const fid = $customFieldFilter.fieldId;
@@ -223,37 +236,39 @@
         );
         if (!mine) return false;
       }
-      // Text filter.
-      if (filter.trim()) {
-        const needle = filter.toLowerCase();
-        const inTitle = item.issue.title.toLowerCase().includes(needle);
-        const inLabel = item.issue.labels.some((l) =>
-          l.name.toLowerCase().includes(needle),
-        );
-        if (!inTitle && !inLabel) return false;
+      // Text filter. A lone "#" (or empty filter) is not a query.
+      const needle = filter.trim().toLowerCase();
+      const hashed = needle.startsWith("#");
+      const numNeedle = hashed ? needle.slice(1) : needle;
+      if (needle && !(numNeedle === "" && hashed)) {
+        // A "#"-prefixed number is an explicit, exact issue-number search; a
+        // bare number prefix-matches the number AND also tries title/label.
+        const numeric = /^\d+$/.test(numNeedle);
+        const num = String(item.issue.number);
+        const numMatch = numeric && (hashed ? num === numNeedle : num.startsWith(numNeedle));
+        const textMatch =
+          !(numeric && hashed) &&
+          (item.issue.title.toLowerCase().includes(needle) ||
+            item.issue.labels.some((l) =>
+              l.name.toLowerCase().includes(needle),
+            ));
+        if (!numMatch && !textMatch) return false;
       }
       // Status chip filter. Empty selection = "All".
       if ($selectedStatusFilters.size > 0) {
         const key = statusName ?? null;
         if (!$selectedStatusFilters.has(key)) return false;
       }
-      // Custom field filter.
-      if (
-        $customFieldFilter.fieldId &&
-        $customFieldFilter.selected.size > 0
-      ) {
-        const target = customFilterableFields.find(
-          (f) => f.id === $customFieldFilter.fieldId,
+      // Custom field filter. `customFieldFilterName` resolves the active
+      // field by id; if the id has gone stale a self-healing $effect clears
+      // the filter, so here we simply skip when it can't be resolved.
+      if (customFieldFilterName && $customFieldFilter.selected.size > 0) {
+        const itemVal = item.field_values.find(
+          (fv) => fv.field_name.toLowerCase() === customFieldFilterName,
         );
-        if (target) {
-          const itemVal = item.field_values.find(
-            (fv) =>
-              fv.field_name.toLowerCase() === target.name.toLowerCase(),
-          );
-          const label = itemVal?.text ?? null;
-          // `selected` holds option names (so they work across projects).
-          if (!label || !$customFieldFilter.selected.has(label)) return false;
-        }
+        const label = itemVal?.text ?? null;
+        // `selected` holds option names (so they work across projects).
+        if (!label || !$customFieldFilter.selected.has(label)) return false;
       }
       return true;
     }),
@@ -274,6 +289,19 @@
   function pickCustomField(id: string | null) {
     $customFieldFilter = { fieldId: id, selected: new Set() };
   }
+
+  $effect(() => {
+    // Self-heal a stale custom filter: if a field id is set but no longer
+    // resolves to a visible filterable field (e.g. its project was removed),
+    // clear it so it can't linger as a phantom active selection.
+    if (
+      $customFieldFilter.fieldId &&
+      customFilterableFields.length > 0 &&
+      !customFilterableFields.some((f) => f.id === $customFieldFilter.fieldId)
+    ) {
+      pickCustomField(null);
+    }
+  });
 
   /** String-valued view of the status filter for FilterPicker (null → __none__). */
   const statusSelectedStrings = $derived(
@@ -383,7 +411,11 @@
 
 <div class="wrap">
   <div class="filters">
-    <input placeholder="Filter…" bind:value={filter} aria-label="Filter" />
+    <input
+      placeholder="Filter by title, label, or #number…"
+      bind:value={filter}
+      aria-label="Filter items"
+    />
     <button class="primary small" onclick={() => ($showNewIssue = true)}
       >+ New</button
     >

@@ -91,6 +91,27 @@ npm run tauri dev
 
 `GHTASKS_CLIENT_ID` must be set at build time. A `.env` file at the repo root with `GHTASKS_CLIENT_ID=Ov23lihPJQFjJ3eZd0Zc` works for local dev.
 
+## Testing
+
+```bash
+npm test            # full suite: unit (vitest) + e2e (playwright)
+npm run test:unit   # pure-logic unit tests, no browser
+npm run test:e2e    # frontend driven in headless Chromium
+```
+
+The e2e suite runs the **real Svelte frontend in Chromium with a mocked Tauri
+IPC layer** — no Rust, no GitHub auth, no network. The mock
+([tests/e2e/fixtures/tauriMock.ts](tests/e2e/fixtures/tauriMock.ts)) installs
+`window.__TAURI_INTERNALS__` before the bundle loads and answers every
+`invoke`/event/plugin call from a scripted scenario; the frontend runs
+unmodified. See [tests/README.md](tests/README.md) for how to write a test and
+add a scenario. A Tauri WebView can't be driven by Playwright directly, which is
+why we mock at the IPC seam rather than spinning up `tauri-driver`.
+
+When you change an `invoke` command's shape in `src/lib/api.ts`, update the
+matching `case` (and `Scenario` type) in `tauriMock.ts` so the e2e suite stays
+in sync with the IPC contract.
+
 ## Code conventions
 
 - **TypeScript:** strict mode. Prefer `$derived` over recomputed assignments. Named exports only.

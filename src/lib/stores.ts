@@ -239,10 +239,14 @@ export const visibleIssues = derived(
         out.push({ issue: i, sourceId: r.source_id });
       }
     }
-    // Most recently updated first.
-    out.sort((a, b) =>
-      a.issue.updated_at < b.issue.updated_at ? 1 : -1,
-    );
+    // Most recently updated first, with a stable node_id tiebreaker so equal
+    // timestamps keep a deterministic order across renders.
+    out.sort((a, b) => {
+      const at = a.issue.updated_at;
+      const bt = b.issue.updated_at;
+      if (at !== bt) return at < bt ? 1 : -1;
+      return a.issue.node_id < b.issue.node_id ? -1 : 1;
+    });
     return out;
   },
 );

@@ -42,8 +42,19 @@
         if (!mine) return false;
       }
       // Text filter.
-      if (filter.trim() === "") return true;
-      const needle = filter.toLowerCase();
+      const needle = filter.trim().toLowerCase();
+      const hashed = needle.startsWith("#");
+      const numNeedle = hashed ? needle.slice(1) : needle;
+      // A lone "#" (or empty filter) is not a query — show everything.
+      if (numNeedle === "" && (needle === "" || hashed)) return true;
+      if (/^\d+$/.test(numNeedle)) {
+        const num = String(issue.number);
+        // "#123" is an explicit, exact issue-number search (and does not fall
+        // through to title/label). A bare "123" prefix-matches the number and
+        // also still tries title/label below.
+        if (hashed) return num === numNeedle;
+        if (num.startsWith(numNeedle)) return true;
+      }
       return (
         issue.title.toLowerCase().includes(needle) ||
         issue.labels.some((l) => l.name.toLowerCase().includes(needle))
@@ -128,7 +139,7 @@
 <div class="wrap">
   <div class="filters">
     <input
-      placeholder="Filter…"
+      placeholder="Filter by title, label, or #number…"
       bind:value={filter}
       aria-label="Filter issues"
     />

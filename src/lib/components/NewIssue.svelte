@@ -166,6 +166,10 @@
     lastTemplatesRepo = target;
     templateKey = "";
     formValues = {};
+    // Reset touched-flags so a template picked in the new repo applies its
+    // title/body cleanly instead of being suppressed by stale edits.
+    titleTouched = false;
+    bodyTouched = false;
 
     const cached = templatesByRepo.get(target);
     if (cached) {
@@ -295,20 +299,27 @@
           submitting = false;
           return;
         }
+        // Capture the project + status selection BEFORE awaiting so a
+        // mid-flight project switch can't make the optimistic item point at
+        // the wrong board / status field.
+        const srcId = projectSrc.id;
+        const fieldId = statusField?.id;
+        const optionId = statusOptionId || undefined;
         const res = await api.createIssueInProject(
           repo,
           projectSrc.project_id,
           input,
-          statusField?.id,
-          statusOptionId || undefined,
+          fieldId,
+          optionId,
         );
         created = res.issue;
         const projectItem = buildProjectItem(
           created,
           repo,
           res.item_id,
-          statusField?.id,
-          statusOptionId || undefined,
+          srcId,
+          fieldId,
+          optionId,
         );
         insertProjectItem(projectSrc.id, projectItem);
         recordRecentlyCreated({
@@ -362,11 +373,11 @@
     issue: Issue,
     repoFullName: string,
     itemId: string,
+    srcId: string,
     initialStatusFieldId?: string,
     initialStatusOptionId?: string,
   ): import("../api").ProjectItem {
-    const snap = $projectResults.find((r) => r.source_id === projectSourceId)
-      ?.snapshot;
+    const snap = $projectResults.find((r) => r.source_id === srcId)?.snapshot;
     const fieldValues: import("../api").ProjectItemFieldValue[] = [];
     if (snap && initialStatusFieldId && initialStatusOptionId) {
       const field = snap.fields.find((f) => f.id === initialStatusFieldId);
