@@ -49,6 +49,7 @@ export function defaultScenario(): Scenario {
     },
     updateCheck: { available: false, version: null, body: null },
     version: "9.9.9-test",
+    inbox: data.INBOX_ITEMS,
   };
 }
 

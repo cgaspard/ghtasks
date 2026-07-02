@@ -21,11 +21,13 @@
     appView,
     updateAvailable,
     rowDensity,
+    inbox,
   } from "./lib/stores";
   import { get } from "svelte/store";
   import Login from "./lib/components/Login.svelte";
   import IssueList from "./lib/components/IssueList.svelte";
   import ProjectList from "./lib/components/ProjectList.svelte";
+  import InboxList from "./lib/components/InboxList.svelte";
   import NewIssue from "./lib/components/NewIssue.svelte";
   import Settings from "./lib/components/Settings.svelte";
   import TopBar from "./lib/components/TopBar.svelte";
@@ -36,6 +38,7 @@
   let pollHandle: ReturnType<typeof setInterval> | null = null;
   let updateCheckHandle: ReturnType<typeof setInterval> | null = null;
   let unlistenProjectPage: UnlistenFn | null = null;
+  let unlistenOpenInbox: UnlistenFn | null = null;
   /** Bumped on each refresh. Pages arriving for an older generation are
    * ignored so late stragglers don't leak into the next refresh. */
   let refreshGeneration = 0;
@@ -221,6 +224,15 @@
       console.log(
         `[ghtasks] refresh() gen=${gen} complete: ${srcs.length} source(s), ${issueTotal} issue(s), ${projectTotal} project item(s), new=${$newSinceLastSync}`,
       );
+
+      // Awaiting scan is independent + best-effort: a failure here must never
+      // break the projects/issues refresh, so it's fire-and-forget.
+      void api
+        .fetchInbox()
+        .then((items) => {
+          if (gen === refreshGeneration) $inbox = items;
+        })
+        .catch((e) => console.warn("[ghtasks] fetch_inbox failed:", e));
     } catch (e) {
       console.error("[ghtasks] refresh() failed:", e);
       $lastError = String(e);
@@ -276,6 +288,15 @@
       handleProjectPage(refreshGeneration, e.payload);
     }).then((fn) => {
       unlistenProjectPage = fn;
+    });
+
+    // A clicked desktop notification (macOS release build) focuses the app and
+    // fires this event with the item's node_id — jump to the Inbox tab.
+    void listen<string>("open-inbox-item", () => {
+      $appView = { kind: "list" };
+      $activeTab = "inbox";
+    }).then((fn) => {
+      unlistenOpenInbox = fn;
     });
 
     void getVersion().then((v) => ($appVersion = v));
@@ -336,6 +357,7 @@
       if (pollHandle) clearInterval(pollHandle);
       if (updateCheckHandle) clearInterval(updateCheckHandle);
       if (unlistenProjectPage) unlistenProjectPage();
+      if (unlistenOpenInbox) unlistenOpenInbox();
       unsubUpdate();
       window.removeEventListener("keydown", onKeydown);
     };
@@ -357,6 +379,8 @@
             <ProjectList />
           {:else if $activeTab === "issues"}
             <IssueList />
+          {:else if $activeTab === "inbox"}
+            <InboxList />
           {:else if $activeTab === "settings"}
             <Settings onSourcesChanged={refresh} />
           {/if}

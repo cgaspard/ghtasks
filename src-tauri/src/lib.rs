@@ -1,5 +1,6 @@
 mod auth;
 mod commands;
+mod inbox;
 mod error;
 mod github;
 mod http_log;
@@ -44,7 +45,6 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
-        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
             // AppleScript mode registers the app in the user's classic
             // Login Items list, which is what System Settings → General →
@@ -68,6 +68,12 @@ pub fn run() {
             // Build the tray. On desktop only — mobile has no tray.
             #[cfg(desktop)]
             tray::setup(app)?;
+
+            // Initialize clickable desktop notifications (native macOS
+            // UserNotifications). Must run on the main thread — `setup` is.
+            // A clicked notification focuses the app + opens the Inbox tab.
+            #[cfg(desktop)]
+            notify::init(&app.handle().clone(), "com.cgaspard.ghtasks");
 
             // Hide from the macOS Dock; the app lives in the menu bar.
             #[cfg(target_os = "macos")]
@@ -169,6 +175,8 @@ pub fn run() {
             commands::save_source,
             commands::delete_source,
             commands::fetch_all,
+            commands::fetch_inbox,
+            commands::mark_inbox_seen,
             commands::create_issue,
             commands::toggle_issue_state,
             commands::get_settings,

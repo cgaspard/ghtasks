@@ -60,7 +60,7 @@ test.describe("New Issue — template application across repo switch", () => {
         default_repo: "octocat/hello-world",
         poll_interval_secs: 90,
         launch_at_login: false,
-        window_size: "default",
+        window_size: "large",
       },
       issueTemplatesByRepo: {
         "octocat/hello-world": {

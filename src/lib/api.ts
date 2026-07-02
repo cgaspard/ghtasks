@@ -275,19 +275,59 @@ export interface UpdateCheckResult {
   body: string | null;
 }
 
-export type RowDensity = "compact" | "default" | "comfortable";
+export type RowDensity = "compact" | "default" | "comfortable" | "spacious";
+export type WindowSize = "large" | "wide";
+
+/** Inbox filter category, derived from the GitHub notification reason. */
+export type InboxCategory =
+  | "review_requested"
+  | "mentioned"
+  | "participating"
+  | "assigned"
+  | "other";
+
+export interface InboxItem {
+  issue: Issue;
+  /** Raw GitHub notification reason (assign, mention, review_requested,
+   * comment, author, subscribed, ci_activity, state_change, manual, …). */
+  reason: string;
+  category: InboxCategory;
+  is_pr: boolean;
+  /** GitHub notification thread id (for mark-read sync). */
+  thread_id: string;
+  /** Whether the notification is unread. */
+  unread: boolean;
+  /** ISO-8601 timestamp the thread was last updated. */
+  event_at: string;
+}
 
 export interface Settings {
   default_repo: string | null;
   poll_interval_secs: number;
   launch_at_login: boolean;
-  window_size: "compact" | "default" | "tall" | "wide" | "large";
+  window_size: WindowSize;
   row_density: RowDensity;
+  notifications_sync: boolean;
 }
+
+const ROW_DENSITIES: RowDensity[] = [
+  "compact",
+  "default",
+  "comfortable",
+  "spacious",
+];
 
 /** Resolve a possibly-empty/unknown density value to a valid preset. */
 export function resolveRowDensity(value: string | null | undefined): RowDensity {
-  return value === "compact" || value === "comfortable" ? value : "default";
+  return ROW_DENSITIES.includes(value as RowDensity)
+    ? (value as RowDensity)
+    : "default";
+}
+
+/** Resolve a window-size value to one of the two supported presets. Legacy
+ * values (compact/default/tall) map to the nearest kept option, "large". */
+export function resolveWindowSize(value: string | null | undefined): WindowSize {
+  return value === "wide" ? "wide" : "large";
 }
 
 export const api = {
@@ -303,6 +343,9 @@ export const api = {
   saveSource: (source: Source) => invoke<Source>("save_source", { source }),
   deleteSource: (id: string) => invoke<void>("delete_source", { id }),
   fetchAll: () => invoke<SourceResult[]>("fetch_all"),
+  fetchInbox: () => invoke<InboxItem[]>("fetch_inbox"),
+  markInboxSeen: (nodeId: string, openedAt: string) =>
+    invoke<void>("mark_inbox_seen", { nodeId, openedAt }),
   createIssue: (repo: string, input: NewIssueInput) =>
     invoke<Issue>("create_issue", { repo, input }),
   toggleIssueState: (repo: string, number: number, closed: boolean) =>

@@ -126,9 +126,12 @@ pub struct LinkedPr {
 pub struct Milestone {
     #[serde(default)]
     pub title: String,
-    /// Normalized to the milestone's web URL. REST search returns `html_url`;
-    /// we accept both so the same struct works for REST and GraphQL paths.
-    #[serde(default, alias = "html_url")]
+    /// The milestone's web URL. REST search returns this as `html_url` (it also
+    /// returns an API `url` we don't want — aliasing both onto one field is a
+    /// serde "duplicate field" error, so we deserialize *only* from `html_url`)
+    /// while still serializing back to the frontend as `url`. The GraphQL path
+    /// builds this struct by hand and sets `url` directly.
+    #[serde(default, rename(deserialize = "html_url", serialize = "url"))]
     pub url: String,
     /// ISO-8601 due date, if set.
     #[serde(default)]
@@ -220,6 +223,93 @@ pub async fn search_issues(
     .await?;
     let data: SearchResponse<Issue> = json(resp).await?;
     Ok(data.items)
+}
+
+/// The subject of a notification (the issue/PR/etc. it's about).
+#[derive(Debug, Deserialize, Clone)]
+pub struct NotificationSubject {
+    pub title: String,
+    /// API URL, e.g. `.../repos/o/r/issues/123` or `.../pulls/123`.
+    pub url: Option<String>,
+    /// "Issue" | "PullRequest" | "Release" | "Discussion" | ...
+    #[serde(rename = "type")]
+    pub subject_type: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct NotificationRepo {
+    pub full_name: String,
+}
+
+/// A GitHub notification thread. See `GET /notifications`.
+#[derive(Debug, Deserialize, Clone)]
+pub struct Notification {
+    pub id: String,
+    /// Why this landed in your inbox: mention, review_requested, assign,
+    /// team_mention, comment, author, subscribed, ci_activity, …
+    pub reason: String,
+    pub unread: bool,
+    pub updated_at: String,
+    pub subject: NotificationSubject,
+    pub repository: NotificationRepo,
+}
+
+/// Mark a notification thread as read on GitHub (`PATCH /notifications/threads/
+/// {id}`). Used when the "sync to GitHub" setting is on so triaging in-app also
+/// clears the thread from the user's real inbox. Returns Ok on 205/reset too.
+pub async fn mark_thread_read(client: &reqwest::Client, token: &str, thread_id: &str) -> Result<()> {
+    let resp = crate::http_log::send_timed(
+        client,
+        "mark_thread_read",
+        client
+            .patch(format!("{API_BASE}/notifications/threads/{thread_id}"))
+            .headers(auth_headers(token)),
+    )
+    .await?;
+    let status = resp.status();
+    // 205 Reset Content on success; 304 if already read. Both are fine.
+    if status.is_success() || status.as_u16() == 304 {
+        Ok(())
+    } else {
+        Err(Error::GitHub {
+            status: status.as_u16(),
+            message: resp.text().await.unwrap_or_default(),
+        })
+    }
+}
+
+/// List the authenticated user's notifications. `participating` narrows to
+/// threads the user is directly involved in or mentioned on — the precise
+/// "ball in your court" set. Reads up to 100 (two pages of 50).
+pub async fn list_notifications(
+    client: &reqwest::Client,
+    token: &str,
+    participating: bool,
+) -> Result<Vec<Notification>> {
+    let mut out: Vec<Notification> = Vec::new();
+    for page in 1..=2u32 {
+        let resp = crate::http_log::send_timed(
+            client,
+            "list_notifications",
+            client
+                .get(format!("{API_BASE}/notifications"))
+                .headers(auth_headers(token))
+                .query(&[
+                    ("all", "false"),
+                    ("participating", if participating { "true" } else { "false" }),
+                    ("per_page", "50"),
+                    ("page", &page.to_string()),
+                ]),
+        )
+        .await?;
+        let batch: Vec<Notification> = json(resp).await?;
+        let got = batch.len();
+        out.extend(batch);
+        if got < 50 {
+            break;
+        }
+    }
+    Ok(out)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -338,4 +428,59 @@ pub async fn set_issue_state(
     )
     .await?;
     json(resp).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression: a REST search-issues item whose milestone object carries BOTH
+    /// `url` and `html_url` must decode. Aliasing both onto one field was a serde
+    /// "duplicate field" error that failed the whole search decode (v0.3.0 bug).
+    #[test]
+    fn milestone_with_both_url_and_html_url_decodes() {
+        let json = r#"{
+            "url": "https://api.github.com/repos/o/r/milestones/1",
+            "html_url": "https://github.com/o/r/milestone/1",
+            "id": 9, "number": 1, "state": "open",
+            "title": "v1.0", "due_on": null
+        }"#;
+        let m: Milestone = serde_json::from_str(json).expect("milestone should decode");
+        assert_eq!(m.title, "v1.0");
+        // We want the WEB url (html_url), not the API url.
+        assert_eq!(m.url, "https://github.com/o/r/milestone/1");
+    }
+
+    /// The milestone serializes back to the frontend as `url` (not `html_url`).
+    #[test]
+    fn milestone_serializes_url_key_for_frontend() {
+        let m = Milestone {
+            title: "v2".into(),
+            url: "https://github.com/o/r/milestone/2".into(),
+            due_on: None,
+        };
+        let out = serde_json::to_string(&m).unwrap();
+        assert!(out.contains("\"url\""), "must serialize as `url`: {out}");
+        assert!(!out.contains("html_url"), "must not leak html_url: {out}");
+    }
+
+    /// A full search-issues item with a milestone + PR-ness decodes end to end.
+    #[test]
+    fn search_issue_with_milestone_decodes() {
+        let json = r#"{
+            "id": 1, "node_id": "I_kw", "number": 1486, "title": "fix",
+            "html_url": "h", "state": "open",
+            "labels": [{"name": "bug", "color": "d73a4a"}],
+            "user": {"login": "me", "avatar_url": "a"},
+            "assignees": [{"login": "me", "avatar_url": "a"}],
+            "repository_url": "https://api.github.com/repos/o/r",
+            "body": null, "comments": 2,
+            "updated_at": "2026-06-25T09:00:00Z", "created_at": "2026-06-20T09:00:00Z",
+            "pull_request": {"url": "p"},
+            "milestone": {"url": "api", "html_url": "web", "title": "v1", "due_on": null}
+        }"#;
+        let issue: Issue = serde_json::from_str(json).expect("issue should decode");
+        assert_eq!(issue.number, 1486);
+        assert_eq!(issue.milestone.unwrap().url, "web");
+    }
 }

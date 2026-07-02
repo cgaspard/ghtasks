@@ -88,6 +88,21 @@ test.describe("row density", () => {
     );
   });
 
+  test("the new Spacious preset is selectable and applies", async ({
+    mountApp,
+    page,
+  }) => {
+    await mountApp();
+    await openSettings(page);
+    await page.locator(".seg-btn", { hasText: "Spacious" }).click();
+
+    await page.getByRole("button", { name: "Projects", exact: true }).click();
+    await expect(page.locator("ul.issues")).toHaveAttribute(
+      "data-density",
+      "spacious",
+    );
+  });
+
   test("a persisted (backend) density hydrates the list on load", async ({
     mountApp,
   }) => {
@@ -98,8 +113,9 @@ test.describe("row density", () => {
         default_repo: "octocat/hello-world",
         poll_interval_secs: 90,
         launch_at_login: false,
-        window_size: "default",
+        window_size: "large",
         row_density: "comfortable",
+        notifications_sync: false,
       },
     });
     await expect(page.locator("ul.issues")).toHaveAttribute(
@@ -118,8 +134,9 @@ test.describe("row density", () => {
         default_repo: null,
         poll_interval_secs: 90,
         launch_at_login: false,
-        window_size: "default",
+        window_size: "large",
         row_density: "" as unknown as "default",
+        notifications_sync: false,
       },
     });
     await expect(page.locator("ul.issues")).toHaveAttribute(

@@ -10,13 +10,33 @@ so one app can drive your personal todos, work tasks, and PR review queue.
 - Multi-repo Sources with per-Source enable/notify/color
 - Native filters via GitHub search syntax (including the new issue types)
 - Create / complete / open issues inline
+- **Awaiting my response** — an amber indicator + dedicated tab for issues/PRs
+  that need your reply (@-mention, review requested, re-review), with desktop
+  notifications
 - **Linked-PR indicators** — see the pull request that closes an issue at a
   glance, colored by state (open / merged / closed), one click to open it
 - **Milestone pills** — surface the milestone an issue belongs to
-- **Row density** — Compact / Default / Comfortable, switchable in Settings
+- **Row density** — Compact / Default / Comfortable / Spacious, in Settings
 - Desktop notifications when new matching issues appear
 - Mobile (iOS/Android) via Tauri mobile — planned
 - Real-time via a GitHub App webhook relay — planned
+
+## Awaiting my response
+
+Issues and PRs where the ball is in your court get a warm-amber **gutter dot**
+and a **reason badge** telling you *why* — you were **@-mentioned**, a **review
+was requested** from you, or a PR you reviewed needs a **re-review**. The cue
+appears inline on the Projects/Issues rows and clears once you open the item.
+
+A dedicated **Awaiting** tab (with a count badge) aggregates everything needing
+your response across all your repos — even ones you haven't added as a Source —
+and a desktop notification fires when a new item lands.
+
+![The Awaiting tab with reason badges](docs/design/app-awaiting-tab.png)
+
+Detection uses cheap GitHub search filters (`mentions:@me`,
+`review-requested:@me`) run globally each refresh; "seen" state is tracked
+per-item so you're not re-pinged for something you've already looked at.
 
 ## Row layout & density
 
@@ -31,11 +51,14 @@ Pick the spacing that fits your board in **Settings → General → Row density*
 | Compact | 2 rows; labels fold inline, truncated. Most items per screen. |
 | Default | 3 rows; the metadata line never wraps, labels on their own line. |
 | Comfortable | 3 rows, same structure with larger type and more padding. |
+| Spacious | 3 rows, largest type and most spacing. |
+
+Window size can be set to **Large** or **Wide** in the same panel.
 
 ![Projects tab — Default density](docs/design/app-projects-default.png)
 
-See [docs/design/](docs/design/) for the Compact / Comfortable renders and the
-design rationale.
+See [docs/design/](docs/design/) for the Compact / Comfortable / Spacious renders
+and the design rationale.
 
 ## Linked PRs & milestones
 

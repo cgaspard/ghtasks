@@ -1,6 +1,6 @@
 [package]
 name = "ghtasks"
-version = "0.3.0"
+version = "0.4.0"
 description = "GitHub Tasks — menu bar issue dashboard"
 authors = ["ghtasks"]
 edition = "2021"
@@ -17,8 +17,12 @@ tauri = { version = "2", features = ["tray-icon", "image-png", "devtools", "maco
 tauri-plugin-shell = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-store = "2"
-tauri-plugin-notification = "2"
 tauri-plugin-autostart = "2"
+# Native macOS UserNotifications wrapper — gives us CLICKABLE desktop
+# notifications (Tauri's own plugin can't react to clicks on desktop).
+# Vendored fork of user-notify 0.4.2 with a `.sound()` builder added (upstream
+# has no sound support); see vendor/user-notify. LGPL-3.0-or-later.
+user-notify = { path = "vendor/user-notify" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

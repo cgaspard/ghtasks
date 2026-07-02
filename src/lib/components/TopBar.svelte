@@ -11,6 +11,7 @@
     appVersion,
     appView,
     updateAvailable,
+    unreadCount,
   } from "../stores";
 
   interface Props {
@@ -103,6 +104,16 @@
       class:active={$activeTab === "issues"}
       onclick={() => ($activeTab = "issues")}>Issues</button
     >
+    <button
+      class="await-tab"
+      class:active={$activeTab === "inbox"}
+      onclick={() => ($activeTab = "inbox")}
+    >
+      Inbox
+      {#if $unreadCount > 0}
+        <span class="await-count">{$unreadCount}</span>
+      {/if}
+    </button>
   </nav>
   <div class="right">
     {#if agoLabel}
@@ -280,6 +291,23 @@
   .tabs button.active {
     color: var(--text);
     background: var(--bg-hover);
+  }
+  .await-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .await-count {
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: #e3a008;
+    color: #1a1205;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
   }
   .right {
     display: flex;

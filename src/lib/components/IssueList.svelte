@@ -2,6 +2,7 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { api, repoFullName, type Issue } from "../api";
   import LinkedBadges from "./LinkedBadges.svelte";
+  import InboxBadge from "./InboxBadge.svelte";
   import {
     sourceResults,
     sources,
@@ -17,6 +18,8 @@
     settingsFocus,
     appView,
     rowDensity,
+    inbox,
+    inboxByKey,
   } from "../stores";
 
   let filter = $state("");
@@ -84,13 +87,25 @@
     $selectedSourceIds = new Set();
   }
 
+  /** Opening an item marks it seen, clearing its awaiting flag. Optimistically
+   * drop it from the local set so the indicator vanishes immediately. */
+  function markSeen(issue: Issue) {
+    if (!$inboxByKey.has(issue.node_id)) return;
+    $inbox = $inbox.filter((a) => a.issue.node_id !== issue.node_id);
+    void api
+      .markInboxSeen(issue.node_id, new Date().toISOString())
+      .catch((e) => console.warn("[ghtasks] mark_inbox_seen failed:", e));
+  }
+
   async function open(issue: Issue) {
+    markSeen(issue);
     await openUrl(issue.html_url);
   }
 
   function drillIn(issue: Issue) {
     const repo = repoFullName(issue);
     if (!repo) return;
+    markSeen(issue);
     $appView = {
       kind: "detail",
       repo,
@@ -232,7 +247,19 @@
     <ul class="issues" data-density={$rowDensity}>
       {#each filtered as { issue, sourceId } (issue.node_id)}
         {@const src = $sources.find((s) => s.id === sourceId)}
-        <li class="issue" class:confirming={confirmingId === issue.node_id}>
+        {@const inboxItem = $inboxByKey.get(issue.node_id)}
+        {@const awaitItem =
+          inboxItem &&
+          (inboxItem.category === "review_requested" ||
+            inboxItem.category === "mentioned" ||
+            inboxItem.category === "participating")
+            ? inboxItem
+            : undefined}
+        <li
+          class="issue"
+          class:confirming={confirmingId === issue.node_id}
+          class:awaiting={awaitItem && confirmingId !== issue.node_id}
+        >
           {#if confirmingId === issue.node_id}
             <div class="confirm">
               <div class="confirm-prompt">Close this issue?</div>
@@ -253,6 +280,10 @@
               </div>
             </div>
           {:else}
+            {#if awaitItem}
+              <span class="awaiting-dot" aria-hidden="true"></span>
+              <span class="sr">Awaiting your response</span>
+            {/if}
             <button
               class="check"
               title="Close issue"
@@ -260,6 +291,7 @@
             >
             <div class="body">
               <div class="row1">
+                {#if awaitItem}<InboxBadge category={awaitItem.category} />{/if}
                 <button class="title" onclick={() => open(issue)}>
                   {issue.title}
                 </button>
@@ -474,6 +506,7 @@
     overflow: auto;
   }
   .issue {
+    position: relative;
     display: flex;
     gap: 8px;
     align-items: flex-start;
@@ -481,6 +514,63 @@
   }
   .issue:hover {
     background: var(--bg-elev);
+  }
+  /* ---- awaiting-my-response cue: amber gutter dot + faint left wash ---- */
+  .issue.awaiting {
+    background-image: linear-gradient(
+      90deg,
+      rgba(227, 160, 8, 0.1) 0%,
+      rgba(227, 160, 8, 0.045) 30%,
+      rgba(227, 160, 8, 0) 62%
+    );
+  }
+  .issue.awaiting:hover {
+    background-color: var(--bg-elev);
+    background-image: linear-gradient(
+      90deg,
+      rgba(227, 160, 8, 0.14) 0%,
+      rgba(227, 160, 8, 0.06) 30%,
+      rgba(227, 160, 8, 0) 62%
+    );
+  }
+  .awaiting-dot {
+    position: absolute;
+    left: 2px;
+    top: 12px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #e3a008;
+    box-shadow: 0 0 0 3px rgba(227, 160, 8, 0.18);
+    animation: awaiting-pulse 2.3s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes awaiting-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 3px rgba(227, 160, 8, 0.18);
+    }
+    50% {
+      box-shadow: 0 0 0 5px rgba(227, 160, 8, 0.04);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .awaiting-dot {
+      animation: none;
+    }
+  }
+  .issues[data-density="compact"] :global(.await-badge .lbl) {
+    display: none;
+  }
+  .sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
   .issue.confirming {
     background: rgba(229, 72, 77, 0.08);
@@ -662,6 +752,22 @@
   .issues[data-density="comfortable"] .row3 {
     font-size: 11.5px;
     margin-top: 4px;
+  }
+
+  .issues[data-density="spacious"] .issue {
+    padding: 15px 14px 15px 8px;
+  }
+  .issues[data-density="spacious"] .title {
+    font-size: 15.5px;
+    line-height: 1.4;
+  }
+  .issues[data-density="spacious"] .row2 {
+    font-size: 12.5px;
+    margin-top: 7px;
+  }
+  .issues[data-density="spacious"] .row3 {
+    font-size: 12.5px;
+    margin-top: 6px;
   }
 
   .issues[data-density="compact"] .issue {

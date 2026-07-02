@@ -3,6 +3,7 @@
   import {
     api,
     resolveRowDensity,
+    resolveWindowSize,
     type Repo,
     type RowDensity,
     type Settings as SettingsT,
@@ -15,6 +16,7 @@
     { value: "compact", label: "Compact" },
     { value: "default", label: "Default" },
     { value: "comfortable", label: "Comfortable" },
+    { value: "spacious", label: "Spacious" },
   ];
 
   interface Props {
@@ -26,8 +28,9 @@
     default_repo: null,
     poll_interval_secs: 90,
     launch_at_login: false,
-    window_size: "default",
+    window_size: "large",
     row_density: "default",
+    notifications_sync: false,
   });
   let repos: Repo[] = $state([]);
   let saved = $state(false);
@@ -35,9 +38,10 @@
   onMount(async () => {
     try {
       settings = await api.getSettings();
-      // Normalize a possibly-empty/legacy density value so the control and the
-      // store always hold a valid preset.
+      // Normalize possibly-empty/legacy values so the controls always hold a
+      // valid preset (older installs may have compact/default/tall window sizes).
       settings.row_density = resolveRowDensity(settings.row_density);
+      settings.window_size = resolveWindowSize(settings.window_size);
       $rowDensity = settings.row_density;
       // Trust the OS state over the stored flag on load — they should match,
       // but autostart may have been disabled out-of-band.
@@ -128,11 +132,8 @@
           <Select
             value={settings.window_size}
             options={[
-              { value: "compact", label: "Compact (340 × 480)" },
-              { value: "default", label: "Standard (380 × 560)" },
-              { value: "tall", label: "Tall (380 × 760)" },
-              { value: "wide", label: "Wide (480 × 560)" },
               { value: "large", label: "Large (480 × 760)" },
+              { value: "wide", label: "Wide (480 × 560)" },
             ]}
             onChange={(v) => {
               settings.window_size = v as typeof settings.window_size;
@@ -183,6 +184,19 @@
           />
           Launch at login
         </label>
+
+        <label class="inline">
+          <input
+            type="checkbox"
+            bind:checked={settings.notifications_sync}
+            onchange={save}
+          />
+          Sync Awaiting with GitHub notifications
+        </label>
+        <div class="hint">
+          When on, opening or clearing an Awaiting item marks its GitHub
+          notification read, so it clears from your real inbox too.
+        </div>
 
         {#if saved}
           <div class="saved">Saved</div>
@@ -293,6 +307,12 @@
   .saved {
     color: var(--ok);
     font-size: 12px;
+  }
+  .hint {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.45;
+    margin-top: -4px;
   }
   .seg {
     display: inline-flex;

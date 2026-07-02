@@ -29,8 +29,9 @@ export const SETTINGS: Settings = {
   default_repo: "octocat/hello-world",
   poll_interval_secs: 90,
   launch_at_login: false,
-  window_size: "default",
+  window_size: "large",
   row_density: "default",
+  notifications_sync: false,
 };
 
 let nodeSeq = 1000;
@@ -216,6 +217,7 @@ export const REPO_ISSUES: Issue[] = [
   makeIssue({
     number: 92,
     title: "Fix the login flow",
+    node_id: "AWAIT_92",
     labels: [{ name: "bug", color: "d73a4a" }],
     milestone: {
       title: "v1.0",
@@ -239,4 +241,85 @@ export const REPO_ISSUES: Issue[] = [
 
 export const SOURCE_RESULTS: SourceResult[] = [
   { source_id: REPO_SOURCE.id, issues: REPO_ISSUES, error: null },
+];
+
+/** The notification inbox — mirrors github.com/notifications: mixed reasons,
+ * read + unread. The badge counts UNREAD (3 here). #92 shares a node_id with a
+ * repo issue so its inline needs-response indicator shows on the Issues tab. */
+export const INBOX_ITEMS = [
+  {
+    // Same node_id as the repo-issues #92 so its INLINE indicator shows.
+    issue: makeIssue({
+      number: 92,
+      title: "Fix the login flow",
+      node_id: "AWAIT_92",
+      milestone: {
+        title: "v1.0",
+        url: "https://github.com/octocat/hello-world/milestone/1",
+        due_on: "2026-07-31T00:00:00Z",
+      },
+    }),
+    reason: "review_requested",
+    category: "review_requested",
+    thread_id: "T92",
+    unread: true,
+    is_pr: true,
+    event_at: "2026-06-25T09:00:00Z",
+  },
+  {
+    issue: makeIssue({
+      number: 88,
+      title: "Rework the OAuth callback",
+      html_url: "https://github.com/octocat/hello-world/pull/88",
+    }),
+    reason: "mention",
+    category: "mentioned",
+    thread_id: "T88",
+    unread: true,
+    is_pr: true,
+    event_at: "2026-06-24T09:00:00Z",
+  },
+  {
+    issue: makeIssue({
+      number: 70,
+      title: "Split the sync engine into stages",
+      html_url: "https://github.com/octocat/hello-world/pull/70",
+    }),
+    reason: "comment",
+    category: "participating",
+    thread_id: "T70",
+    unread: false, // already read — shows dimmed
+    is_pr: true,
+    event_at: "2026-06-23T09:00:00Z",
+  },
+  {
+    // Assigned: appears under the Assigned chip; assignments are NOT unread-
+    // notifications here, so don't feed the unread badge.
+    issue: makeIssue({
+      number: 1371,
+      title: "Bug: browser controls missing on facility windows",
+      html_url: "https://github.com/octocat/hello-world/issues/1371",
+    }),
+    reason: "assign",
+    category: "assigned",
+    thread_id: "T1371",
+    unread: true,
+    is_pr: false,
+    event_at: "2026-06-20T09:00:00Z",
+  },
+  {
+    // A "subscribed" notification — in the inbox (All), but not a needs-response
+    // and not shown as an inline indicator on Projects/Issues.
+    issue: makeIssue({
+      number: 55,
+      title: "Bump dependencies",
+      html_url: "https://github.com/octocat/hello-world/pull/55",
+    }),
+    reason: "subscribed",
+    category: "other",
+    thread_id: "T55",
+    unread: true,
+    is_pr: true,
+    event_at: "2026-06-19T09:00:00Z",
+  },
 ];

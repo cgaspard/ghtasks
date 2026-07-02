@@ -38,6 +38,8 @@ export interface Scenario {
   createdIssue?: unknown;
   /** toggle_issue_state response. */
   toggledIssue?: unknown;
+  /** fetch_inbox response (notification inbox items). */
+  inbox?: unknown[];
   /** Per-command overrides: command name -> canned return value. */
   overrides?: Record<string, unknown>;
 }
@@ -156,6 +158,10 @@ function installTauriMock(): void {
       // ---- fetch ----
       case "fetch_all":
         return s.sourceResults || [];
+      case "fetch_inbox":
+        return s.inbox || [];
+      case "mark_inbox_seen":
+        return null;
       case "fetch_all_projects":
         return [];
       case "fetch_all_projects_streaming": {
@@ -207,8 +213,9 @@ function installTauriMock(): void {
           default_repo: null,
           poll_interval_secs: 90,
           launch_at_login: false,
-          window_size: "default",
+          window_size: "large",
           row_density: "default",
+          notifications_sync: false,
         };
       case "save_settings":
         return null;

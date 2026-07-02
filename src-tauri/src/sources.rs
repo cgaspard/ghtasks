@@ -94,9 +94,14 @@ pub struct Settings {
     pub launch_at_login: bool,
     #[serde(default = "default_window_size")]
     pub window_size: String,
-    /// Row density preset: "compact" | "default" | "comfortable".
+    /// Row density preset: "compact" | "default" | "comfortable" | "spacious".
     #[serde(default = "default_row_density")]
     pub row_density: String,
+    /// When true, opening or clearing an Awaiting item also marks its GitHub
+    /// notification thread read (syncing to the user's real inbox). Off by
+    /// default so the app never mutates the inbox unexpectedly.
+    #[serde(default)]
+    pub notifications_sync: bool,
 }
 
 fn default_poll_secs() -> u64 {
@@ -109,15 +114,13 @@ fn default_row_density() -> String {
     "default".to_string()
 }
 
-/// Resolve a size-preset name to (width, height) in logical pixels. Unknown
-/// names fall back to the "default" preset.
+/// Resolve a size-preset name to (width, height) in logical pixels. Only "wide"
+/// and "large" are supported now; legacy names (compact/default/tall) fall back
+/// to "large", the nearest kept option.
 pub fn window_dims(preset: &str) -> (u32, u32) {
     match preset {
-        "compact" => (340, 480),
-        "tall" => (380, 760),
         "wide" => (480, 560),
-        "large" => (480, 760),
-        _ => (380, 560), // "default"
+        _ => (480, 760), // "large" (and any legacy value)
     }
 }
 
@@ -245,6 +248,32 @@ pub fn save_seen(app: &AppHandle, source_id: &str, ids: &[String]) -> Result<()>
     let store = store_handle(app)?;
     let key = format!("seen:{source_id}");
     store.set(key, serde_json::to_value(ids)?);
+    store.save().map_err(Error::from)?;
+    Ok(())
+}
+
+const KEY_AWAITING_SEEN: &str = "awaiting_last_opened";
+
+/// Map of `node_id` -> ISO-8601 timestamp of when the user last opened that
+/// item. An awaiting-item is "unaddressed" only if its triggering event is
+/// newer than this timestamp (or absent).
+pub fn load_awaiting_seen(
+    app: &AppHandle,
+) -> Result<std::collections::HashMap<String, String>> {
+    let store = store_handle(app)?;
+    let v = store
+        .get(KEY_AWAITING_SEEN)
+        .unwrap_or(serde_json::Value::Object(Default::default()));
+    Ok(serde_json::from_value(v).unwrap_or_default())
+}
+
+/// Record that the user just opened `node_id` at `opened_at` (RFC3339), so the
+/// item stops being "awaiting" until a newer event arrives.
+pub fn mark_awaiting_seen(app: &AppHandle, node_id: &str, opened_at: &str) -> Result<()> {
+    let store = store_handle(app)?;
+    let mut map = load_awaiting_seen(app)?;
+    map.insert(node_id.to_string(), opened_at.to_string());
+    store.set(KEY_AWAITING_SEEN, serde_json::to_value(map)?);
     store.save().map_err(Error::from)?;
     Ok(())
 }

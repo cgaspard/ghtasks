@@ -1106,6 +1106,65 @@ pub async fn enrich_issues(
     Ok(out)
 }
 
+/// Batch-fetch the open/closed/merged state of a set of issues/PRs in ONE
+/// aliased GraphQL query. Returns a map from `owner/repo#number` → lowercased
+/// state ("open" | "closed" | "merged"). Used to drop closed/merged items that
+/// linger in the notifications feed. Uses `issueOrPullRequest` so it works for
+/// either type without knowing which up front.
+pub async fn fetch_issue_states(
+    client: &reqwest::Client,
+    token: &str,
+    targets: &[EnrichTarget],
+) -> Result<std::collections::HashMap<String, String>> {
+    let mut out = std::collections::HashMap::new();
+    if targets.is_empty() {
+        return Ok(out);
+    }
+
+    for chunk in targets.chunks(50) {
+        let mut selections = String::new();
+        let mut variables = serde_json::Map::new();
+        for (i, t) in chunk.iter().enumerate() {
+            selections.push_str(&format!(
+                "  i{i}: repository(owner: $o{i}, name: $n{i}) {{ \
+                    issueOrPullRequest(number: $num{i}) {{ \
+                      __typename ... on Issue {{ state }} ... on PullRequest {{ state }} }} }}\n"
+            ));
+            variables.insert(format!("o{i}"), json!(t.owner));
+            variables.insert(format!("n{i}"), json!(t.name));
+            variables.insert(format!("num{i}"), json!(t.number));
+        }
+        let mut header = String::from("query IssueStates(");
+        for i in 0..chunk.len() {
+            if i > 0 {
+                header.push_str(", ");
+            }
+            header.push_str(&format!("$o{i}: String!, $n{i}: String!, $num{i}: Int!"));
+        }
+        header.push_str(") {\n");
+        let query = format!("{header}{selections}}}");
+
+        // A missing repo/number yields a GraphQL error for that alias; tolerate
+        // it by treating a failed chunk as "state unknown" (item kept).
+        let data: Value = match graphql(client, token, &query, Value::Object(variables)).await {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        for (i, t) in chunk.iter().enumerate() {
+            if let Some(state) = data
+                .pointer(&format!("/i{i}/issueOrPullRequest/state"))
+                .and_then(|v| v.as_str())
+            {
+                out.insert(
+                    format!("{}/{}#{}", t.owner, t.name, t.number),
+                    state.to_lowercase(),
+                );
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// GraphQL Issue shape → reuse the REST Issue struct for the frontend. Fill
 /// missing-from-GraphQL fields with sensible defaults.
 fn parse_graphql_issue(content: &Value, repo: &str) -> Option<crate::github::Issue> {

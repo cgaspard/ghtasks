@@ -23,9 +23,12 @@ src/                      Svelte frontend
     persistentStore.ts    localStorage-backed writable() helper
     statusColor.ts        GitHub color palette → CSS
     components/
-      TopBar.svelte       Tabs + avatar menu (Settings/DevTools/Sign out/Quit)
+      TopBar.svelte       Tabs (Projects/Issues/Inbox) + avatar menu
       ProjectList.svelte  Projects tab
       IssueList.svelte    Issues tab
+      InboxList.svelte     Inbox tab (github.com/notifications mirror)
+      InboxBadge.svelte    Amber needs-response cue (inline on Projects/Issues)
+      LinkedBadges.svelte Flat colored linked-PR indicator
       Settings.svelte     Settings accordion (Sources / General / About)
       SourceEditor.svelte Add / edit / delete a Project or Repo source
       NewIssue.svelte     Create-issue modal with optional project attach
@@ -42,9 +45,10 @@ src-tauri/                Rust backend (Tauri)
     auth.rs               OAuth device flow + keyring token storage
     github.rs             Shared HTTP client + GraphQL helper
     projects.rs           Projects v2 GraphQL queries & mutations
-    sources.rs            Source persistence (tauri-plugin-store)
+    inbox.rs              GitHub notification inbox mirror (fetch_inbox + classification)
+    sources.rs            Source + Settings persistence + awaiting seen-state (tauri-plugin-store)
     tray.rs               Tray icon + window anchoring + size presets
-    notify.rs             Desktop notifications on new items
+    notify.rs             Clickable desktop notifications via `user-notify` (native macOS UserNotifications; click → focus + Inbox tab)
     migration.rs           dev.ghtasks.app → com.cgaspard.ghtasks one-shot migration
     http_log.rs           Timing wrapper around reqwest calls (logs `gh-api METHOD path -> status in Nms`)
     error.rs              Shared Result/Error
@@ -144,7 +148,7 @@ Auto-poll every 90s. Manual refresh via the ↻ button in TopBar.
 ## Common diagnostics
 
 - **"I can't see project X":** Open avatar menu → **Developer Tools** → Console. Click `+ Project`. Look for `[ghtasks] list_projects returned N project(s)` and the array. If `0` or missing an expected project, it's almost always: (1) org hasn't approved the OAuth app, (2) SSO not authorized for the token, or (3) stale token from before `read:org` was added — sign out + sign in fixes the last.
-- **Notifications silent:** Check for CSP violations on `ipc:` in the console — `tauri.conf.json` must whitelist `ipc:` + `http://ipc.localhost` in `connect-src`.
+- **Notifications silent / not clickable in dev:** Expected. `notify.rs` uses `user-notify` (native macOS `UserNotifications`), which **only fires from a signed, bundled `.app`**. An unbundled `npm run tauri dev` binary has no Bundle ID, so the crate silently returns an in-memory **mock** that logs (`notify: …`) but shows nothing. To see/click real notifications, run a `tauri build` release. A clicked notification calls `tray::show_at_tray` and emits `open-inbox-item` (node_id payload); `App.svelte` listens and switches to the Inbox tab. (This replaced `tauri-plugin-notification`, whose desktop path couldn't react to clicks — so the old `ipc:` CSP note no longer applies to notifications.)
 - **Issue "disappeared" right after creating it:** Expected for ~60s; the `recentlyCreated` buffer re-injects it. If it persists beyond 2 min, something else is wrong — check the refresh logs.
 
 ## Release Process

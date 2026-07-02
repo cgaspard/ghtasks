@@ -1,6 +1,7 @@
 import { writable, derived } from "svelte/store";
 import type {
   AuthStatus,
+  InboxItem,
   Issue,
   ProjectFetchResult,
   RowDensity,
@@ -182,10 +183,9 @@ export function recordRecentlyCreated(entry: RecentlyCreatedEntry) {
 export const lastError = writable<string | null>(null);
 
 /** Last viewed tab. Persisted. */
-export const activeTab = persistent<"projects" | "issues" | "settings">(
-  "activeTab",
-  "projects",
-);
+export const activeTab = persistent<
+  "projects" | "issues" | "inbox" | "settings"
+>("activeTab", "projects");
 
 /** When true, the New Issue modal is open. */
 export const showNewIssue = writable(false);
@@ -200,6 +200,24 @@ export const settingsSection = persistent<"general" | "sources">(
  * paints at the right density before settings load from the backend; App.svelte
  * re-hydrates it from getSettings() to stay authoritative. */
 export const rowDensity = persistent<RowDensity>("rowDensity", "default");
+
+/** The GitHub notification inbox (read + unread threads), mirrored from the
+ * backend. Persisted so the Inbox tab + badge paint instantly on cold launch. */
+export const inbox = persistent<InboxItem[]>("inbox", []);
+
+/** Unread notification count — drives the Inbox tab badge, like GitHub. */
+export const unreadCount = derived(
+  inbox,
+  ($i) => $i.filter((item) => item.unread).length,
+);
+
+/** node_id → item, for O(1) lookup when rendering the inline indicator on the
+ * Projects/Issues lists (needs-response items only). */
+export const inboxByKey = derived(inbox, ($i) => {
+  const m = new Map<string, InboxItem>();
+  for (const item of $i) m.set(item.issue.node_id, item);
+  return m;
+});
 
 /** Transient (not persisted) pointer for deep-links from list CTAs. When
  * non-null, the Sources editor auto-opens the matching new-source form on

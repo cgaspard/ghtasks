@@ -1,5 +1,6 @@
 use crate::auth;
 use crate::error::{Error, Result};
+use crate::inbox;
 use crate::github::{self, Issue, IssueComment, NewIssueInput, Repo, RepoLabel, User};
 use crate::notify;
 use crate::projects::{self, ProjectSnapshot, ProjectSummary};
@@ -197,10 +198,13 @@ pub async fn fetch_all(
                     // so installing a Source doesn't flood the user.
                     if !seen.is_empty() && !new_ids.is_empty() {
                         for issue in new_ids.iter().take(5) {
-                            let _ = notify::send(
+                            // Not an inbox item — no node_id target; a click just
+                            // focuses the app.
+                            notify::send(
                                 &app,
                                 &format!("{}: {}", src.name, issue.title),
                                 &format!("#{} in {}", issue.number, repo),
+                                "",
                             );
                         }
                     }
@@ -296,6 +300,74 @@ pub async fn create_issue(
 ) -> Result<Issue> {
     let token = require_token().await?;
     github::create_issue(&state.http, &token, &repo, &input).await
+}
+
+/// Dedup key for desktop-notification tracking (which items we've already pinged).
+const INBOX_NOTIFY_SOURCE: &str = "inbox";
+
+/// Fetch the GitHub notification inbox (read + unread), minus anything the user
+/// has locally marked Done. Fires a desktop notification for each newly-appeared
+/// *needs-response* item.
+#[tauri::command]
+pub async fn fetch_inbox(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Vec<inbox::InboxItem>> {
+    let token = require_token().await?;
+    let items = inbox::fetch_inbox(&state.http, &token).await?;
+
+    // Locally-"Done" threads are suppressed even if still present upstream
+    // (mirrors GitHub's Done removing an item from the inbox).
+    let done = sources::load_awaiting_seen(&app).unwrap_or_default();
+    let visible: Vec<inbox::InboxItem> = items
+        .into_iter()
+        .filter(|item| !done.contains_key(item.key()))
+        .collect();
+
+    // Ping once per newly-appeared notifiable item (unread + needs-response).
+    let notified = sources::load_seen(&app, INBOX_NOTIFY_SOURCE).unwrap_or_default();
+    let notifiable_ids: Vec<String> = visible
+        .iter()
+        .filter(|i| i.is_notifiable())
+        .map(|i| i.key().to_string())
+        .collect();
+    if !notified.is_empty() {
+        for item in visible
+            .iter()
+            .filter(|i| i.is_notifiable() && !notified.contains(&i.key().to_string()))
+        {
+            let (title, body) = item.notification();
+            // Attach the item's node_id so a click routes to it in the Inbox.
+            notify::send(&app, &title, &body, item.key());
+        }
+    }
+    let _ = sources::save_seen(&app, INBOX_NOTIFY_SOURCE, &notifiable_ids);
+
+    Ok(visible)
+}
+
+/// Mark an inbox item Done (the user opened or cleared it). Records the local
+/// Done-state so it stays cleared. If the "notifications_sync" setting is on,
+/// also marks the GitHub notification thread read. `node_id` is `notif:{id}`.
+#[tauri::command]
+pub async fn mark_inbox_seen(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    node_id: String,
+    opened_at: String,
+) -> Result<()> {
+    sources::mark_awaiting_seen(&app, &node_id, &opened_at)?;
+
+    let settings = sources::load_settings(&app).unwrap_or_default();
+    if settings.notifications_sync {
+        if let Some(thread_id) = node_id.strip_prefix("notif:") {
+            if let Ok(token) = require_token().await {
+                // Best-effort: a sync failure must not fail the local clear.
+                let _ = github::mark_thread_read(&state.http, &token, thread_id).await;
+            }
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
