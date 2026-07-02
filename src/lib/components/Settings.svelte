@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { openUrl } from "@tauri-apps/plugin-opener";
   import {
     api,
     resolveRowDensity,
@@ -34,6 +35,11 @@
   });
   let repos: Repo[] = $state([]);
   let saved = $state(false);
+  /** null = unknown/unchecked yet, true = allowed, false = denied in System
+   * Settings. macOS never re-prompts once denied, so this drives a hint
+   * pointing the user at System Settings instead of silent, permanent no-op
+   * notifications. */
+  let notificationsAllowed: boolean | null = $state(null);
 
   onMount(async () => {
     try {
@@ -57,7 +63,18 @@
     } catch (e) {
       $lastError = String(e);
     }
+    try {
+      notificationsAllowed = await api.notificationPermissionStatus();
+    } catch {
+      // non-fatal — hint just won't show
+    }
   });
+
+  function openNotificationSettings() {
+    void openUrl(
+      "x-apple.systempreferences:com.apple.preference.notifications",
+    );
+  }
 
   async function save() {
     try {
@@ -175,6 +192,18 @@
             }}
           />
         </label>
+
+        {#if notificationsAllowed === false}
+          <div class="notif-warning">
+            <span>
+              Notifications are turned off for GH Tasks in System Settings —
+              you won't get desktop alerts for new inbox items.
+            </span>
+            <button class="linklike" onclick={openNotificationSettings}>
+              Open System Settings
+            </button>
+          </div>
+        {/if}
 
         <label class="inline">
           <input
@@ -315,6 +344,29 @@
     color: var(--text-dim);
     line-height: 1.45;
     margin-top: -4px;
+  }
+  .notif-warning {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(227, 160, 8, 0.13);
+    border: 1px solid rgba(227, 160, 8, 0.35);
+    color: #f6c445;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .linklike {
+    all: unset;
+    cursor: pointer;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .linklike:hover {
+    text-decoration: underline;
   }
   .seg {
     display: inline-flex;

@@ -369,6 +369,8 @@ export const api = {
   getSettings: () => invoke<Settings>("get_settings"),
   saveSettings: (settings: Settings) =>
     invoke<void>("save_settings", { settings }),
+  notificationPermissionStatus: () =>
+    invoke<boolean | null>("notification_permission_status"),
   showWindow: () => invoke<void>("show_window"),
   hideWindow: () => invoke<void>("hide_window"),
   quit: () => invoke<void>("quit_app"),

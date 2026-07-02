@@ -182,6 +182,7 @@ pub fn run() {
             commands::toggle_issue_state,
             commands::get_settings,
             commands::save_settings,
+            commands::notification_permission_status,
             commands::show_window,
             commands::hide_window,
             commands::quit_app,

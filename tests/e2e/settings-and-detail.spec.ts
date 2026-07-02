@@ -39,6 +39,30 @@ test.describe("Settings", () => {
     await expect(page.getByText("Roadmap")).toBeVisible();
     await expect(page.getByText("hello-world bugs")).toBeVisible();
   });
+
+  test("shows a warning + System Settings link when notifications are denied", async ({
+    mountApp,
+    page,
+  }) => {
+    await mountApp({ notificationPermissionStatus: false });
+    await page.getByRole("button", { name: "octocat" }).click();
+    await page.getByRole("menuitem", { name: "Settings" }).click();
+
+    await expect(page.getByText(/Notifications are turned off/)).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Open System Settings" }),
+    ).toBeVisible();
+  });
+
+  test("no warning when notifications are allowed or unknown", async ({
+    mountApp,
+    page,
+  }) => {
+    await mountApp({ notificationPermissionStatus: true });
+    await page.getByRole("button", { name: "octocat" }).click();
+    await page.getByRole("menuitem", { name: "Settings" }).click();
+    await expect(page.getByText(/Notifications are turned off/)).toHaveCount(0);
+  });
 });
 
 test.describe("Issue detail", () => {

@@ -66,6 +66,17 @@ pub fn init(app: &AppHandle, bundle_id: &str) {
     });
 }
 
+/// Whether the OS currently allows this app to show notifications. `None`
+/// when the manager isn't initialized yet (dev mock, or `init()` hasn't run) —
+/// the frontend treats that the same as "unknown," not "denied." macOS never
+/// re-prompts once a user denies permission, so this is how the UI detects a
+/// stuck-denied state and can point the user at System Settings instead of
+/// silently doing nothing.
+pub async fn permission_granted() -> Option<bool> {
+    let manager = MANAGER.get().cloned()?;
+    manager.get_notification_permission_state().await.ok()
+}
+
 /// Show a desktop notification. `node_id` (when non-empty) is attached so a
 /// click can route the frontend to that Inbox item. Best-effort: if the manager
 /// isn't initialized (or we're the dev mock), this is a no-op / logs only.

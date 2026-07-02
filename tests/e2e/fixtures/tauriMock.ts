@@ -18,6 +18,8 @@ export interface Scenario {
   projectPages: unknown[];
   /** get_settings response. */
   settings: unknown;
+  /** notification_permission_status response: true/false/null (unknown). */
+  notificationPermissionStatus?: boolean | null;
   /** list_projects response. */
   projects: unknown[];
   /** list_repos response. */
@@ -237,6 +239,8 @@ function installTauriMock(): void {
         };
       case "save_settings":
         return null;
+      case "notification_permission_status":
+        return s.notificationPermissionStatus ?? null;
       case "autostart_status":
         return (s.settings as Record<string, unknown>)?.launch_at_login ?? false;
       case "show_window":

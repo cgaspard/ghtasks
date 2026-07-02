@@ -453,6 +453,16 @@ pub async fn get_settings(app: AppHandle) -> Result<Settings> {
     sources::load_settings(&app)
 }
 
+/// Whether the OS currently allows desktop notifications for this app.
+/// `null` when unknown (manager not initialized — e.g. still starting up, or
+/// this is a dev build without a signed bundle). macOS never re-prompts once
+/// denied, so the frontend uses this to show a "notifications are off" hint
+/// pointing at System Settings, instead of silently sending nothing forever.
+#[tauri::command]
+pub async fn notification_permission_status() -> Option<bool> {
+    notify::permission_granted().await
+}
+
 #[tauri::command]
 pub async fn save_settings(app: AppHandle, settings: Settings) -> Result<()> {
     sources::save_settings(&app, &settings)?;
