@@ -39,3 +39,8 @@ playwright-report
 .playwright
 blob-report
 .playwright-mcp
+
+# Marketing video build intermediates (final demo.mp4 + demo.gif are committed)
+docs/marketing/video/raw/
+docs/marketing/video/framed/
+docs/marketing/video/demo-app.mp4

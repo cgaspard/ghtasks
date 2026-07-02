@@ -14,7 +14,9 @@
     "test:unit:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:report": "playwright show-report"
+    "test:e2e:report": "playwright show-report",
+    "capture": "playwright test capture.spec.ts frame.spec.ts",
+    "capture:video": "bash scripts/make-demo-video.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.1.1",
