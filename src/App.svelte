@@ -22,6 +22,9 @@
     updateAvailable,
     rowDensity,
     inbox,
+    inboxHasMore,
+    inboxLoadingMore,
+    inboxPage,
   } from "./lib/stores";
   import { get } from "svelte/store";
   import Login from "./lib/components/Login.svelte";
@@ -225,12 +228,19 @@
         `[ghtasks] refresh() gen=${gen} complete: ${srcs.length} source(s), ${issueTotal} issue(s), ${projectTotal} project item(s), new=${$newSinceLastSync}`,
       );
 
-      // Awaiting scan is independent + best-effort: a failure here must never
-      // break the projects/issues refresh, so it's fire-and-forget.
+      // Inbox scan is independent + best-effort: a failure here must never
+      // break the projects/issues refresh, so it's fire-and-forget. A refresh
+      // always re-fetches page 1 (the live "what's current" view) and
+      // replaces the inbox wholesale — any older pages loaded via scroll are
+      // dropped, matching the rest of the app's "refresh replaces" model.
       void api
-        .fetchInbox()
-        .then((items) => {
-          if (gen === refreshGeneration) $inbox = items;
+        .fetchInbox(1)
+        .then((page) => {
+          if (gen === refreshGeneration) {
+            $inbox = page.items;
+            $inboxHasMore = page.has_more;
+            $inboxPage = 1;
+          }
         })
         .catch((e) => console.warn("[ghtasks] fetch_inbox failed:", e));
     } catch (e) {
@@ -238,6 +248,27 @@
       $lastError = String(e);
     } finally {
       if (gen === refreshGeneration) $loading = false;
+    }
+  }
+
+  /** Append the next page of older inbox items (infinite scroll). Never
+   * touches notify bookkeeping or replaces page 1 — it's pure history
+   * browsing, so a scroll can't trigger a desktop notification. */
+  async function loadMoreInbox() {
+    if (get(inboxLoadingMore) || !get(inboxHasMore)) return;
+    const nextPage = get(inboxPage) + 1;
+    $inboxLoadingMore = true;
+    try {
+      const page = await api.fetchInbox(nextPage);
+      const existingIds = new Set($inbox.map((i) => i.issue.node_id));
+      const fresh = page.items.filter((i) => !existingIds.has(i.issue.node_id));
+      $inbox = [...$inbox, ...fresh];
+      $inboxHasMore = page.has_more;
+      $inboxPage = nextPage;
+    } catch (e) {
+      console.warn("[ghtasks] loadMoreInbox failed:", e);
+    } finally {
+      $inboxLoadingMore = false;
     }
   }
 
@@ -380,7 +411,7 @@
           {:else if $activeTab === "issues"}
             <IssueList />
           {:else if $activeTab === "inbox"}
-            <InboxList />
+            <InboxList onLoadMore={loadMoreInbox} />
           {:else if $activeTab === "settings"}
             <Settings onSourcesChanged={refresh} />
           {/if}

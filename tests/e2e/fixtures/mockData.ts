@@ -344,3 +344,23 @@ export const INBOX_ITEMS = [
     event_at: "2026-06-18T09:00:00Z",
   },
 ];
+
+/** A second inbox "page" (older items) for infinite-scroll tests — distinct
+ * node_ids/titles from INBOX_ITEMS so appended rows are easy to assert on. */
+export const INBOX_PAGE_2 = [
+  {
+    issue: makeIssue({
+      number: 12,
+      title: "Archive the legacy webhook handler",
+      html_url: "https://github.com/octocat/hello-world/issues/12",
+      node_id: "AWAIT_OLD_12",
+    }),
+    reason: "comment",
+    category: "participating",
+    addressable: true,
+    thread_id: "TOLD12",
+    unread: false,
+    is_pr: false,
+    event_at: "2026-05-01T09:00:00Z",
+  },
+];

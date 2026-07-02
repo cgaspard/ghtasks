@@ -73,6 +73,13 @@ pub struct InboxItem {
     pub unread: bool,
     /// ISO-8601 timestamp the thread was last updated.
     pub event_at: String,
+    /// Open/closed/merged state of the underlying issue/PR, when known (only
+    /// resolved for `addressable` items). `None` when unresolved (non-
+    /// addressable, or the state lookup failed/omitted this item) — treated
+    /// as "assume open" everywhere state matters, since GitHub itself never
+    /// hides a notification just because its issue/PR later closed.
+    #[serde(default)]
+    pub is_open: Option<bool>,
 }
 
 impl InboxItem {
@@ -80,12 +87,14 @@ impl InboxItem {
         &self.issue.node_id
     }
 
-    /// Whether this item should raise a desktop notification: it must be unread
+    /// Whether this item should raise a desktop notification: it must be
+    /// unread, not a closed/merged issue or PR (GitHub still lists those in
+    /// the inbox, but pinging about something already resolved is noise),
     /// and either a needs-response category OR a CI-activity update (per user
     /// preference — build failures/completions ping). Other noisy reasons
     /// (subscribed / author / state_change / manual) do not ping.
     pub fn is_notifiable(&self) -> bool {
-        if !self.unread {
+        if !self.unread || self.is_open == Some(false) {
             return false;
         }
         self.category.is_notifiable() || self.reason == "ci_activity"
@@ -231,24 +240,42 @@ fn item_from_notification(n: &Notification) -> Option<InboxItem> {
         event_at: n.updated_at.clone(),
         reason: n.reason.clone(),
         issue,
+        is_open: None,
     })
 }
 
-/// Fetch the user's notification inbox — read AND unread threads (mirroring
-/// github.com/notifications). Closed/merged items that linger in the feed are
-/// dropped via a batched GraphQL state check.
-pub async fn fetch_inbox(client: &reqwest::Client, token: &str) -> Result<Vec<InboxItem>> {
-    // `all=true` so the mirror shows read items too (GitHub's default inbox is
-    // "everything not Done", not unread-only). `participating=false` to match
-    // the full inbox rather than only threads you're directly in.
-    let notifications = crate::github::list_notifications(client, token, false).await?;
+/// One page of the inbox, plus whether GitHub has more notifications beyond it
+/// (drives the frontend's infinite-scroll "load more").
+pub struct InboxPage {
+    pub items: Vec<InboxItem>,
+    pub has_more: bool,
+}
 
-    let candidates: Vec<InboxItem> = notifications
+/// Fetch one page (1-indexed, 50 GitHub notifications each) of the user's
+/// inbox — read AND unread threads (mirroring github.com/notifications).
+/// Closed/merged issues and PRs stay in the list — GitHub's own inbox keeps a
+/// notification visible after its subject closes or merges, it doesn't drop
+/// it — but each item's resolved open/closed state is attached via a batched
+/// GraphQL check so notification-gating can still skip pinging about
+/// already-resolved items. Items stay in GitHub's own newest-first order
+/// within this page — unread state is a display cue, not a sort key,
+/// matching github.com/notifications.
+pub async fn fetch_inbox_page(
+    client: &reqwest::Client,
+    token: &str,
+    page: u32,
+) -> Result<InboxPage> {
+    // `participating=false` to match the full inbox rather than only threads
+    // you're directly in — `list_notifications` already passes `all=true` so
+    // read items are included too.
+    let fetched = crate::github::list_notifications(client, token, false, page).await?;
+
+    let candidates: Vec<InboxItem> = fetched
+        .items
         .iter()
         .filter_map(item_from_notification)
         .collect();
 
-    // Drop closed/merged items (a notification lingers after its PR closes).
     let targets: Vec<crate::projects::EnrichTarget> = candidates
         .iter()
         .filter_map(|item| {
@@ -261,25 +288,26 @@ pub async fn fetch_inbox(client: &reqwest::Client, token: &str) -> Result<Vec<In
         .await
         .unwrap_or_default();
 
-    let mut out: Vec<InboxItem> = candidates
+    let mut items: Vec<InboxItem> = candidates
         .into_iter()
-        .filter(|item| match item.repo_parts() {
-            Some((owner, name, number)) => {
-                match states.get(&format!("{owner}/{name}#{number}")) {
-                    Some(state) => state == "open",
-                    None => true,
+        .map(|mut item| {
+            if let Some((owner, name, number)) = item.repo_parts() {
+                if let Some(state) = states.get(&format!("{owner}/{name}#{number}")) {
+                    item.is_open = Some(state == "open");
                 }
             }
-            None => true,
+            item
         })
         .collect();
-    // Unread first, then newest.
-    out.sort_by(|a, b| {
-        b.unread
-            .cmp(&a.unread)
-            .then_with(|| b.event_at.cmp(&a.event_at))
-    });
-    Ok(out)
+    // Preserve GitHub's own newest-first order (matches github.com/notifications).
+    // Unread state is a visual cue (dot/bold), not a position override — sorting
+    // unread-first here would float an old-but-unread item above a newer-but-read
+    // one, which is not how github.com/notifications renders the list.
+    items.sort_by(|a, b| b.event_at.cmp(&a.event_at));
+    Ok(InboxPage {
+        items,
+        has_more: fetched.has_more,
+    })
 }
 
 #[cfg(test)]
@@ -385,6 +413,39 @@ mod tests {
         ))
         .unwrap();
         assert!(!sub.is_notifiable());
+    }
+
+    #[test]
+    fn closed_or_merged_items_are_not_notifiable_but_stay_addressable() {
+        // A closed/merged PR must not ping (already-resolved is noise) but must
+        // still be a normal, addressable, visible inbox item — GitHub's own
+        // inbox keeps notifications for closed/merged subjects, it just doesn't
+        // re-ping about them (regression: v0.4.x briefly dropped these from the
+        // list entirely, which disagreed with github.com/notifications).
+        let mut merged = item_from_notification(&notif(
+            "mention",
+            "PullRequest",
+            "https://api.github.com/repos/o/r/pulls/1",
+            true,
+        ))
+        .unwrap();
+        assert!(merged.is_notifiable(), "open + unread + mention pings");
+        merged.is_open = Some(false);
+        assert!(!merged.is_notifiable(), "closed/merged must not ping");
+        assert!(merged.addressable, "still addressable/visible in the list");
+
+        // Unknown state (is_open: None — lookup skipped or failed) must not
+        // block notification; fail-open, matching the rest of the state-check
+        // plumbing.
+        let unknown = item_from_notification(&notif(
+            "mention",
+            "PullRequest",
+            "https://api.github.com/repos/o/r/pulls/2",
+            true,
+        ))
+        .unwrap();
+        assert_eq!(unknown.is_open, None);
+        assert!(unknown.is_notifiable(), "unknown state defaults to notifiable");
     }
 
     #[test]

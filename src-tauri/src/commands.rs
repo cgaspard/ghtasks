@@ -332,50 +332,65 @@ fn keys_to_notify(
         .collect()
 }
 
-/// Fetch the GitHub notification inbox (read + unread), minus anything the user
-/// has locally marked Done. Fires a desktop notification for each newly-appeared
-/// *needs-response* item.
+/// Response shape for `fetch_inbox`: this page's items plus whether GitHub has
+/// more beyond it (drives the frontend's infinite scroll).
+#[derive(Debug, Serialize)]
+pub struct InboxPageResult {
+    pub items: Vec<inbox::InboxItem>,
+    pub has_more: bool,
+}
+
+/// Fetch one page of the GitHub notification inbox (read + unread, 50 per
+/// page). This is a pure mirror of GitHub's own inbox — no local suppression
+/// — so read/unread always matches what github.com/notifications shows.
+/// `page` is 1-indexed; page 1 is the live "what's current" view called by
+/// the refresh loop, pages 2+ are "load more" scroll requests.
+///
+/// Desktop-notification bookkeeping (and firing) only happens for **page 1**
+/// — paging deeper is browsing history, not a refresh, so scrolling down to
+/// see an old notification must never trigger a banner or perturb the
+/// notified-set that page-1 refreshes rely on.
 #[tauri::command]
 pub async fn fetch_inbox(
     app: AppHandle,
     state: State<'_, AppState>,
-) -> Result<Vec<inbox::InboxItem>> {
+    page: u32,
+) -> Result<InboxPageResult> {
     let token = require_token().await?;
-    let items = inbox::fetch_inbox(&state.http, &token).await?;
+    let fetched = inbox::fetch_inbox_page(&state.http, &token, page).await?;
+    let visible = fetched.items;
 
-    // Locally-"Done" threads are suppressed even if still present upstream
-    // (mirrors GitHub's Done removing an item from the inbox).
-    let done = sources::load_awaiting_seen(&app).unwrap_or_default();
-    let visible: Vec<inbox::InboxItem> = items
-        .into_iter()
-        .filter(|item| !done.contains_key(item.key()))
-        .collect();
-
-    // Ping once per newly-appeared notifiable item (unread + needs-response).
-    // Use `has_seen_baseline` (not `notified.is_empty()`) to decide whether
-    // this is truly the first-ever fetch: an empty `notified` list is
-    // ambiguous between "never seeded" and "seeded, but nothing notifiable
-    // that time" — the latter must still notify on this fetch if something
-    // new showed up, otherwise a launch that races two notifiable items into
-    // the same "empty → seed" fetch silently eats both (see #v0.4.1 bug where
-    // CI-activity notifications never fired on a fresh install).
-    let had_baseline = sources::has_seen_baseline(&app, INBOX_NOTIFY_SOURCE);
-    let notified = sources::load_seen(&app, INBOX_NOTIFY_SOURCE).unwrap_or_default();
-    let notifiable_ids: Vec<String> = visible
-        .iter()
-        .filter(|i| i.is_notifiable())
-        .map(|i| i.key().to_string())
-        .collect();
-    for key in keys_to_notify(had_baseline, &notified, &notifiable_ids) {
-        if let Some(item) = visible.iter().find(|i| i.key() == key) {
-            let (title, body) = item.notification();
-            // Attach the item's node_id so a click routes to it in the Inbox.
-            notify::send(&app, &title, &body, item.key());
+    if page == 1 {
+        // Ping once per newly-appeared notifiable item (unread + needs-response).
+        // Use `has_seen_baseline` (not `notified.is_empty()`) to decide whether
+        // this is truly the first-ever fetch: an empty `notified` list is
+        // ambiguous between "never seeded" and "seeded, but nothing notifiable
+        // that time" — the latter must still notify on this fetch if something
+        // new showed up, otherwise a launch that races two notifiable items
+        // into the same "empty → seed" fetch silently eats both (see the
+        // v0.4.1 bug where CI-activity notifications never fired on a fresh
+        // install).
+        let had_baseline = sources::has_seen_baseline(&app, INBOX_NOTIFY_SOURCE);
+        let notified = sources::load_seen(&app, INBOX_NOTIFY_SOURCE).unwrap_or_default();
+        let notifiable_ids: Vec<String> = visible
+            .iter()
+            .filter(|i| i.is_notifiable())
+            .map(|i| i.key().to_string())
+            .collect();
+        for key in keys_to_notify(had_baseline, &notified, &notifiable_ids) {
+            if let Some(item) = visible.iter().find(|i| i.key() == key) {
+                let (title, body) = item.notification();
+                // Attach the item's node_id so a click routes to it in the Inbox.
+                notify::send(&app, &title, &body, item.key());
+            }
         }
+        let _ = sources::save_seen(&app, INBOX_NOTIFY_SOURCE, &notifiable_ids);
     }
-    let _ = sources::save_seen(&app, INBOX_NOTIFY_SOURCE, &notifiable_ids);
 
-    Ok(visible)
+    Ok(InboxPageResult {
+        items: visible,
+        has_more: fetched.has_more,
+    })
 }
 
 /// Mark an inbox item Done (the user opened or cleared it). Records the local
@@ -400,6 +415,25 @@ pub async fn mark_inbox_seen(
         }
     }
     Ok(())
+}
+
+/// Mark a GitHub notification thread read for real — used by the Inbox tab's
+/// explicit "Mark read" action. Unlike `mark_inbox_seen` (a local-only
+/// dismissal used by the Projects/Issues inline indicator), this always calls
+/// GitHub's API regardless of the `notifications_sync` setting: the Inbox tab
+/// is a mirror of the real inbox, so its own read/unread action has to be
+/// real too, not just a local suppression that can drift from GitHub forever.
+/// `node_id` is `notif:{thread_id}`.
+#[tauri::command]
+pub async fn mark_notification_read(
+    state: State<'_, AppState>,
+    node_id: String,
+) -> Result<()> {
+    let token = require_token().await?;
+    let Some(thread_id) = node_id.strip_prefix("notif:") else {
+        return Ok(());
+    };
+    github::mark_thread_read(&state.http, &token, thread_id).await
 }
 
 #[tauri::command]

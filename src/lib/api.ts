@@ -302,6 +302,16 @@ export interface InboxItem {
   unread: boolean;
   /** ISO-8601 timestamp the thread was last updated. */
   event_at: string;
+  /** Open/closed/merged state of the underlying issue/PR, when known. `null`
+   * when unresolved (non-addressable, or the lookup didn't cover this item) —
+   * treat as open. GitHub keeps closed/merged items in the inbox, so this
+   * never hides an item; it's informational only. */
+  is_open: boolean | null;
+}
+
+export interface InboxPageResult {
+  items: InboxItem[];
+  has_more: boolean;
 }
 
 export interface Settings {
@@ -346,9 +356,12 @@ export const api = {
   saveSource: (source: Source) => invoke<Source>("save_source", { source }),
   deleteSource: (id: string) => invoke<void>("delete_source", { id }),
   fetchAll: () => invoke<SourceResult[]>("fetch_all"),
-  fetchInbox: () => invoke<InboxItem[]>("fetch_inbox"),
+  fetchInbox: (page: number) =>
+    invoke<InboxPageResult>("fetch_inbox", { page }),
   markInboxSeen: (nodeId: string, openedAt: string) =>
     invoke<void>("mark_inbox_seen", { nodeId, openedAt }),
+  markNotificationRead: (nodeId: string) =>
+    invoke<void>("mark_notification_read", { nodeId }),
   createIssue: (repo: string, input: NewIssueInput) =>
     invoke<Issue>("create_issue", { repo, input }),
   toggleIssueState: (repo: string, number: number, closed: boolean) =>

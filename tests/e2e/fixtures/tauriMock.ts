@@ -38,8 +38,14 @@ export interface Scenario {
   createdIssue?: unknown;
   /** toggle_issue_state response. */
   toggledIssue?: unknown;
-  /** fetch_inbox response (notification inbox items). */
+  /** fetch_inbox response for page 1 (notification inbox items). */
   inbox?: unknown[];
+  /** Whether page 1 claims more pages exist (drives infinite-scroll tests). */
+  inboxHasMore?: boolean;
+  /** Additional pages (2, 3, …) returned by fetch_inbox as the user scrolls,
+   * in order — inboxPages[0] is page 2, inboxPages[1] is page 3, etc. Each
+   * entry is the page's item array; has_more is true until the last entry. */
+  inboxPages?: unknown[][];
   /** Per-command overrides: command name -> canned return value. */
   overrides?: Record<string, unknown>;
 }
@@ -158,9 +164,21 @@ function installTauriMock(): void {
       // ---- fetch ----
       case "fetch_all":
         return s.sourceResults || [];
-      case "fetch_inbox":
-        return s.inbox || [];
+      case "fetch_inbox": {
+        const page = (args.page as number) || 1;
+        const extraPages = (s.inboxPages as unknown[][]) || [];
+        if (page === 1) {
+          return {
+            items: s.inbox || [],
+            has_more: (s.inboxHasMore as boolean) ?? extraPages.length > 0,
+          };
+        }
+        const idx = page - 2; // page 2 -> extraPages[0]
+        const items = extraPages[idx] || [];
+        return { items, has_more: idx + 1 < extraPages.length };
+      }
       case "mark_inbox_seen":
+      case "mark_notification_read":
         return null;
       case "fetch_all_projects":
         return [];

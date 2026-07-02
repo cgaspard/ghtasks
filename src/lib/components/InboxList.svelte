@@ -1,8 +1,11 @@
 <script lang="ts">
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { api, repoFullName, type InboxItem, type Issue } from "../api";
-  import { inbox, rowDensity, appView } from "../stores";
+  import { inbox, rowDensity, appView, inboxHasMore, inboxLoadingMore } from "../stores";
   import LinkedBadges from "./LinkedBadges.svelte";
+  import Select from "./Select.svelte";
+
+  let { onLoadMore }: { onLoadMore: () => void | Promise<void> } = $props();
 
   // Quiet muted reason label per row — maps raw GitHub reasons to friendly text.
   function reasonLabel(reason: string): string {
@@ -40,6 +43,20 @@
     | "participating"
     | "assigned";
   let chip: Chip = $state("all");
+  let searchQuery = $state("");
+
+  /** Client-side filter over loaded items only — GitHub's Notifications API
+   * has no full-text search endpoint, so search never reaches further back
+   * than what's already been paged in. */
+  function matchesSearch(item: InboxItem, q: string): boolean {
+    if (!q) return true;
+    const needle = q.toLowerCase();
+    return (
+      item.issue.title.toLowerCase().includes(needle) ||
+      (repoFullName(item.issue) ?? "").toLowerCase().includes(needle) ||
+      reasonLabel(item.reason).toLowerCase().includes(needle)
+    );
+  }
 
   function inChip(item: InboxItem, c: Chip): boolean {
     switch (c) {
@@ -74,8 +91,13 @@
     { key: "participating", label: "Participating" },
     { key: "assigned", label: "Assigned" },
   ];
+  const chipOptions = $derived(
+    CHIPS.map((c) => ({ value: c.key, label: c.label, badge: counts[c.key] })),
+  );
 
-  const filtered = $derived($inbox.filter((i) => inChip(i, chip)));
+  const filtered = $derived(
+    $inbox.filter((i) => inChip(i, chip) && matchesSearch(i, searchQuery.trim())),
+  );
 
   function relTime(iso: string): string {
     const then = new Date(iso).getTime();
@@ -87,25 +109,28 @@
     return `${Math.floor(s / 86400)}d`;
   }
 
-  /** Mark an item Done — remove from the list (optimistically) + persist. Syncs
-   * to GitHub (mark thread read) when the sync setting is on, handled backend
-   * side in mark_inbox_seen. */
-  function markSeen(issue: Issue) {
-    $inbox = $inbox.filter((i) => i.issue.node_id !== issue.node_id);
+  /** Mark an item read — flips it locally (optimistic, matches the row
+   * staying visible like github.com/notifications does for read items) and
+   * marks the real GitHub notification thread read. The Inbox is a mirror,
+   * so this is never a local-only dismissal — it always reaches GitHub. */
+  function markRead(nodeId: string) {
+    $inbox = $inbox.map((i) =>
+      i.issue.node_id === nodeId ? { ...i, unread: false } : i,
+    );
     void api
-      .markInboxSeen(issue.node_id, new Date().toISOString())
-      .catch((e) => console.warn("[ghtasks] mark_inbox_seen failed:", e));
+      .markNotificationRead(nodeId)
+      .catch((e) => console.warn("[ghtasks] mark_notification_read failed:", e));
   }
 
   async function open(issue: Issue) {
-    markSeen(issue);
+    markRead(issue.node_id);
     await openUrl(issue.html_url);
   }
 
   /** The chevron opens the item. Concrete issues/PRs drill into the in-app
    * detail view; non-addressable items (CI runs, releases, …) open on GitHub. */
   async function drillIn(item: InboxItem) {
-    markSeen(item.issue);
+    markRead(item.issue.node_id);
     const repo = repoFullName(item.issue);
     if (!item.addressable || !repo) {
       await openUrl(item.issue.html_url);
@@ -118,24 +143,71 @@
       nodeId: item.issue.node_id,
     };
   }
+
+  // Infinite scroll: observe a sentinel at the bottom of the list and load
+  // the next page when it enters the scroll container's viewport. Only wired
+  // up while unfiltered ("All", no search) — chip/search filters operate on
+  // already-loaded items, so scrolling under a filter shouldn't silently
+  // fetch unrelated pages the user can't see the effect of.
+  let sentinel: HTMLElement | null = $state(null);
+  const canLoadMore = $derived(
+    chip === "all" && searchQuery.trim() === "" && $inboxHasMore,
+  );
+
+  $effect(() => {
+    if (!sentinel || !canLoadMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) void onLoadMore();
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  });
 </script>
 
 <div class="wrap">
   {#if $inbox.length > 0}
-    <div class="chips" role="tablist" aria-label="Filter">
-      {#each CHIPS as c}
-        <button
-          class="chip"
-          class:active={chip === c.key}
-          role="tab"
-          aria-selected={chip === c.key}
-          onclick={() => (chip = c.key)}
+    <div class="toolbar">
+      <div class="filter">
+        <Select
+          value={chip}
+          options={chipOptions}
+          onChange={(v) => (chip = v)}
+          searchable={false}
+          minWidth={150}
+        />
+      </div>
+      <div class="search">
+        <svg
+          class="search-icon"
+          viewBox="0 0 16 16"
+          width="12"
+          height="12"
+          aria-hidden="true"
         >
-          {c.label}
-          {#if counts[c.key] > 0}<span class="chip-count">{counts[c.key]}</span
-            >{/if}
-        </button>
-      {/each}
+          <path
+            fill="currentColor"
+            d="M11.5 7a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Zm-.82 4.74a6 6 0 1 1 1.06-1.06l3.04 3.04a.75.75 0 1 1-1.06 1.06l-3.04-3.04Z"
+          />
+        </svg>
+        <input
+          type="text"
+          class="search-input"
+          placeholder="Search loaded items…"
+          bind:value={searchQuery}
+        />
+        {#if searchQuery}
+          <button
+            class="search-clear"
+            aria-label="Clear search"
+            onclick={() => (searchQuery = "")}
+          >
+            ×
+          </button>
+        {/if}
+      </div>
     </div>
   {/if}
 
@@ -151,31 +223,39 @@
   {:else if filtered.length === 0}
     <div class="empty">
       <div class="empty-title">Nothing here</div>
-      <div class="empty-body">No items match this filter.</div>
+      <div class="empty-body">
+        {searchQuery
+          ? "No loaded items match your search."
+          : "No items match this filter."}
+      </div>
     </div>
   {:else}
     <ul class="issues" data-density={$rowDensity}>
       {#each filtered as item (item.issue.node_id)}
         <li class="issue" class:read={!item.unread}>
+          <span class="unread-dot" class:visible={item.unread} aria-hidden="true"
+          ></span>
           <div class="body">
             <div class="row1">
               <button class="title" onclick={() => open(item.issue)}>
                 {item.issue.title}
               </button>
               <span class="reason">{reasonLabel(item.reason)}</span>
-              <button
-                class="act"
-                title="Done — clear from this list"
-                aria-label="Mark done"
-                onclick={() => markSeen(item.issue)}
-              >
-                <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-                  <path
-                    fill="currentColor"
-                    d="M13.78 4.22a.75.75 0 0 1 0 1.06l-6.5 6.5a.75.75 0 0 1-1.06 0l-3-3a.75.75 0 1 1 1.06-1.06L6.75 10.19l5.97-5.97a.75.75 0 0 1 1.06 0Z"
-                  />
-                </svg>
-              </button>
+              {#if item.unread}
+                <button
+                  class="act"
+                  title="Mark read"
+                  aria-label="Mark read"
+                  onclick={() => markRead(item.issue.node_id)}
+                >
+                  <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M13.78 4.22a.75.75 0 0 1 0 1.06l-6.5 6.5a.75.75 0 0 1-1.06 0l-3-3a.75.75 0 1 1 1.06-1.06L6.75 10.19l5.97-5.97a.75.75 0 0 1 1.06 0Z"
+                    />
+                  </svg>
+                </button>
+              {/if}
               <button
                 class="drill"
                 title="View on GitHub"
@@ -216,6 +296,14 @@
           </div>
         </li>
       {/each}
+      {#if canLoadMore}
+        <li class="sentinel-row" bind:this={sentinel}>
+          {#if $inboxLoadingMore}
+            <div class="loader small" aria-hidden="true"></div>
+            <span>Loading more…</span>
+          {/if}
+        </li>
+      {/if}
     </ul>
   {/if}
 </div>
@@ -227,42 +315,66 @@
     height: 100%;
     min-height: 0;
   }
-  .chips {
+  .toolbar {
     display: flex;
-    gap: 4px;
+    align-items: center;
+    gap: 8px;
     padding: 8px 10px;
     border-bottom: 1px solid var(--border);
     background: var(--bg);
     flex: 0 0 auto;
-    overflow-x: auto;
   }
-  .chip {
-    all: unset;
-    cursor: pointer;
-    display: inline-flex;
+  .filter {
+    flex: 0 0 auto;
+  }
+  .search {
+    position: relative;
+    display: flex;
     align-items: center;
-    gap: 5px;
-    padding: 3px 10px;
+    flex: 1 1 auto;
+    min-width: 120px;
+  }
+  .search-icon {
+    position: absolute;
+    left: 7px;
+    color: var(--text-dim);
+    pointer-events: none;
+  }
+  .wrap .toolbar .search input.search-input {
+    width: 100%;
+    padding: 4px 22px 4px 24px;
     border-radius: 999px;
     border: 1px solid var(--border);
     background: var(--bg-elev);
-    color: var(--text-dim);
-    font-size: 11px;
-    font-weight: 500;
-    white-space: nowrap;
-  }
-  .chip:hover {
     color: var(--text);
+    font-size: 11px;
+    line-height: 1.4;
   }
-  .chip.active {
-    background: var(--accent);
+  .search-input:focus {
+    outline: none;
     border-color: var(--accent);
-    color: #fff;
   }
-  .chip-count {
-    font-size: 10px;
-    font-weight: 700;
-    opacity: 0.85;
+  .search-input::placeholder {
+    color: var(--text-dim);
+  }
+  .search-clear {
+    all: unset;
+    cursor: pointer;
+    position: absolute;
+    right: 5px;
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: var(--text-dim);
+    font-size: 13px;
+    line-height: 1;
+  }
+  .search-clear:hover {
+    color: var(--text);
+    background: var(--bg-hover);
   }
   .act {
     all: unset;
@@ -286,9 +398,11 @@
     background: rgba(46, 160, 67, 0.15);
     color: #3fb950;
   }
-  /* Read items (already seen on GitHub) are dimmed but still listed. */
+  /* Unread mirrors github.com/notifications: bold title + a small accent dot
+     in the gutter. Read items drop both — normal weight, no dot — rather
+     than being dimmed, so a long-scrolled history doesn't read as "greyed
+     out and broken." */
   .issue.read .title {
-    color: var(--text-dim);
     font-weight: 400;
   }
   .issue.read .reason {
@@ -302,8 +416,6 @@
     min-height: 0;
     overflow: auto;
   }
-  /* Calm rows — the whole tab is "awaiting", so no per-row amber cue. The
-     reason reads as a quiet muted label instead. */
   .issue {
     position: relative;
     display: flex;
@@ -313,6 +425,17 @@
   }
   .issue:hover {
     background-color: var(--bg-elev);
+  }
+  .unread-dot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    margin-top: 6px;
+    border-radius: 50%;
+    background: transparent;
+  }
+  .unread-dot.visible {
+    background: var(--accent);
   }
   .body {
     flex: 1;
@@ -337,7 +460,7 @@
     flex: 1 1 auto;
     min-width: 0;
     color: var(--text);
-    font-weight: 500;
+    font-weight: 600;
     line-height: 1.35;
     white-space: nowrap;
     overflow: hidden;
@@ -476,5 +599,30 @@
     font-size: 12px;
     line-height: 1.5;
     max-width: 300px;
+  }
+  .sentinel-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px;
+    color: var(--text-dim);
+    font-size: 11.5px;
+  }
+  .loader {
+    border-radius: 50%;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    animation: loader-spin 0.8s linear infinite;
+  }
+  .loader.small {
+    width: 14px;
+    height: 14px;
+    border-width: 2px;
+  }
+  @keyframes loader-spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 </style>

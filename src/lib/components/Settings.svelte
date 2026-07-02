@@ -191,11 +191,13 @@
             bind:checked={settings.notifications_sync}
             onchange={save}
           />
-          Sync Awaiting with GitHub notifications
+          Sync the "needs response" indicator with GitHub
         </label>
         <div class="hint">
-          When on, opening or clearing an Awaiting item marks its GitHub
-          notification read, so it clears from your real inbox too.
+          When on, opening or clearing the needs-response indicator on a
+          Projects/Issues item also marks its GitHub notification read. The
+          Inbox tab's own "Mark read" always syncs, regardless of this
+          setting.
         </div>
 
         {#if saved}

@@ -177,6 +177,7 @@ pub fn run() {
             commands::fetch_all,
             commands::fetch_inbox,
             commands::mark_inbox_seen,
+            commands::mark_notification_read,
             commands::create_issue,
             commands::toggle_issue_state,
             commands::get_settings,

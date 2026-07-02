@@ -278,38 +278,43 @@ pub async fn mark_thread_read(client: &reqwest::Client, token: &str, thread_id: 
     }
 }
 
-/// List the authenticated user's notifications. `participating` narrows to
-/// threads the user is directly involved in or mentioned on — the precise
-/// "ball in your court" set. Reads up to 100 (two pages of 50).
+/// One page of notifications, plus whether GitHub has more beyond it.
+pub struct NotificationPage {
+    pub items: Vec<Notification>,
+    pub has_more: bool,
+}
+
+const NOTIFICATIONS_PER_PAGE: u32 = 50;
+
+/// Fetch one page (1-indexed) of the user's notifications, 50 at a time.
+/// `all=true` so read threads are included too (github.com/notifications
+/// shows everything not Done, not just unread — the mirror needs to match).
+/// `has_more` is true when this page came back full (a partial/empty page
+/// means we've reached the end — GitHub's notifications endpoint doesn't
+/// expose a total count, so page-fullness is the standard signal).
 pub async fn list_notifications(
     client: &reqwest::Client,
     token: &str,
     participating: bool,
-) -> Result<Vec<Notification>> {
-    let mut out: Vec<Notification> = Vec::new();
-    for page in 1..=2u32 {
-        let resp = crate::http_log::send_timed(
-            client,
-            "list_notifications",
-            client
-                .get(format!("{API_BASE}/notifications"))
-                .headers(auth_headers(token))
-                .query(&[
-                    ("all", "false"),
-                    ("participating", if participating { "true" } else { "false" }),
-                    ("per_page", "50"),
-                    ("page", &page.to_string()),
-                ]),
-        )
-        .await?;
-        let batch: Vec<Notification> = json(resp).await?;
-        let got = batch.len();
-        out.extend(batch);
-        if got < 50 {
-            break;
-        }
-    }
-    Ok(out)
+    page: u32,
+) -> Result<NotificationPage> {
+    let resp = crate::http_log::send_timed(
+        client,
+        "list_notifications",
+        client
+            .get(format!("{API_BASE}/notifications"))
+            .headers(auth_headers(token))
+            .query(&[
+                ("all", "true"),
+                ("participating", if participating { "true" } else { "false" }),
+                ("per_page", &NOTIFICATIONS_PER_PAGE.to_string()),
+                ("page", &page.to_string()),
+            ]),
+    )
+    .await?;
+    let items: Vec<Notification> = json(resp).await?;
+    let has_more = items.len() as u32 == NOTIFICATIONS_PER_PAGE;
+    Ok(NotificationPage { items, has_more })
 }
 
 #[derive(Debug, Serialize, Deserialize)]

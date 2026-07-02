@@ -202,8 +202,21 @@ export const settingsSection = persistent<"general" | "sources">(
 export const rowDensity = persistent<RowDensity>("rowDensity", "default");
 
 /** The GitHub notification inbox (read + unread threads), mirrored from the
- * backend. Persisted so the Inbox tab + badge paint instantly on cold launch. */
+ * backend. Persisted so the Inbox tab + badge paint instantly on cold launch.
+ * Holds page 1 (replaced on every refresh) plus any older pages appended via
+ * infinite scroll. */
 export const inbox = persistent<InboxItem[]>("inbox", []);
+
+/** Whether GitHub has more inbox pages beyond what's currently loaded — drives
+ * the infinite-scroll sentinel in InboxList. Not persisted: recomputed by the
+ * next page-1 refresh on launch. */
+export const inboxHasMore = writable(true);
+
+/** True while a "load more" (page 2+) fetch is in flight. Transient. */
+export const inboxLoadingMore = writable(false);
+
+/** Highest inbox page fetched so far (1 = only the live refresh page). */
+export const inboxPage = writable(1);
 
 /** Unread notification count — drives the Inbox tab badge, like GitHub. */
 export const unreadCount = derived(
