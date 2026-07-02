@@ -244,6 +244,18 @@ pub fn load_seen(app: &AppHandle, source_id: &str) -> Result<Vec<String>> {
     Ok(serde_json::from_value(v).unwrap_or_default())
 }
 
+/// Whether `save_seen` has ever been called for this `source_id`. An empty
+/// `Vec` from `load_seen` is ambiguous — it means either "never seeded" or
+/// "seeded, but nothing was notifiable that time" — so notify-on-new logic
+/// must check this, not `seen.is_empty()`, to avoid silently swallowing
+/// genuinely-new items on a fetch that happens to follow a truly-empty one.
+pub fn has_seen_baseline(app: &AppHandle, source_id: &str) -> bool {
+    let Ok(store) = store_handle(app) else {
+        return false;
+    };
+    store.get(format!("seen:{source_id}")).is_some()
+}
+
 pub fn save_seen(app: &AppHandle, source_id: &str, ids: &[String]) -> Result<()> {
     let store = store_handle(app)?;
     let key = format!("seen:{source_id}");

@@ -194,9 +194,15 @@ pub async fn fetch_all(
                         .filter(|i| !seen.contains(&i.node_id))
                         .collect();
 
-                    // Only notify after the first fetch (when `seen` is non-empty),
-                    // so installing a Source doesn't flood the user.
-                    if !seen.is_empty() && !new_ids.is_empty() {
+                    // Only notify once this source has a baseline (so adding a
+                    // Source doesn't flood the user with everything it already
+                    // matches). Checking `has_seen_baseline` rather than
+                    // `!seen.is_empty()` avoids swallowing genuinely-new issues
+                    // that happen to arrive on the very fetch that establishes
+                    // the baseline (e.g. the source matched zero issues once,
+                    // then a matching issue appears on the next fetch).
+                    let had_baseline = sources::has_seen_baseline(&app, &src.id);
+                    if had_baseline && !new_ids.is_empty() {
                         for issue in new_ids.iter().take(5) {
                             // Not an inbox item — no node_id target; a click just
                             // focuses the app.
@@ -305,6 +311,27 @@ pub async fn create_issue(
 /// Dedup key for desktop-notification tracking (which items we've already pinged).
 const INBOX_NOTIFY_SOURCE: &str = "inbox";
 
+/// Pure decision: which currently-notifiable keys should raise a desktop
+/// notification this fetch. Extracted from `fetch_inbox` so the "don't flood
+/// on the very first fetch, but never silently swallow a later new item" rule
+/// is independently testable (regression test for the v0.4.1 bug where two
+/// CI-activity notifications landed on the fetch that established the
+/// baseline and neither ever notified).
+fn keys_to_notify(
+    had_baseline: bool,
+    previously_notified: &[String],
+    currently_notifiable: &[String],
+) -> Vec<String> {
+    if !had_baseline {
+        return Vec::new();
+    }
+    currently_notifiable
+        .iter()
+        .filter(|k| !previously_notified.contains(k))
+        .cloned()
+        .collect()
+}
+
 /// Fetch the GitHub notification inbox (read + unread), minus anything the user
 /// has locally marked Done. Fires a desktop notification for each newly-appeared
 /// *needs-response* item.
@@ -325,17 +352,22 @@ pub async fn fetch_inbox(
         .collect();
 
     // Ping once per newly-appeared notifiable item (unread + needs-response).
+    // Use `has_seen_baseline` (not `notified.is_empty()`) to decide whether
+    // this is truly the first-ever fetch: an empty `notified` list is
+    // ambiguous between "never seeded" and "seeded, but nothing notifiable
+    // that time" — the latter must still notify on this fetch if something
+    // new showed up, otherwise a launch that races two notifiable items into
+    // the same "empty → seed" fetch silently eats both (see #v0.4.1 bug where
+    // CI-activity notifications never fired on a fresh install).
+    let had_baseline = sources::has_seen_baseline(&app, INBOX_NOTIFY_SOURCE);
     let notified = sources::load_seen(&app, INBOX_NOTIFY_SOURCE).unwrap_or_default();
     let notifiable_ids: Vec<String> = visible
         .iter()
         .filter(|i| i.is_notifiable())
         .map(|i| i.key().to_string())
         .collect();
-    if !notified.is_empty() {
-        for item in visible
-            .iter()
-            .filter(|i| i.is_notifiable() && !notified.contains(&i.key().to_string()))
-        {
+    for key in keys_to_notify(had_baseline, &notified, &notifiable_ids) {
+        if let Some(item) = visible.iter().find(|i| i.key() == key) {
             let (title, body) = item.notification();
             // Attach the item's node_id so a click routes to it in the Inbox.
             notify::send(&app, &title, &body, item.key());
@@ -857,4 +889,48 @@ pub async fn get_issue_detail(
         github::list_issue_comments(&state.http, &token, &repo, number),
     )?;
     Ok(IssueDetail { issue, comments })
+}
+
+#[cfg(test)]
+mod notify_gating_tests {
+    use super::keys_to_notify;
+
+    #[test]
+    fn no_baseline_never_notifies_even_if_items_are_notifiable() {
+        // First-ever fetch: seed silently, no banners, regardless of contents.
+        let notifiable = vec!["a".to_string(), "b".to_string()];
+        assert_eq!(keys_to_notify(false, &[], &notifiable), Vec::<String>::new());
+    }
+
+    #[test]
+    fn baseline_established_with_notifiable_items_then_new_item_arrives() {
+        // Regression for the v0.4.1 bug: the fetch that establishes the
+        // baseline can itself contain notifiable items (e.g. two CI-activity
+        // notifications sitting in the inbox on first launch). The seed fetch
+        // must not notify; the next fetch with the SAME items must not
+        // re-notify; a genuinely new item after that must notify exactly once.
+        let notifiable_first_fetch = vec!["ci-1".to_string(), "ci-2".to_string()];
+        let notified_1 = keys_to_notify(false, &[], &notifiable_first_fetch);
+        assert!(notified_1.is_empty(), "seed fetch must not notify");
+        let previously_notified = notifiable_first_fetch.clone();
+
+        let notified_2 = keys_to_notify(true, &previously_notified, &notifiable_first_fetch);
+        assert!(notified_2.is_empty(), "already-seen items must not re-notify");
+
+        let notifiable_third_fetch =
+            vec!["ci-1".to_string(), "ci-2".to_string(), "ci-3".to_string()];
+        let notified_3 = keys_to_notify(true, &previously_notified, &notifiable_third_fetch);
+        assert_eq!(notified_3, vec!["ci-3".to_string()], "only the new item notifies");
+    }
+
+    #[test]
+    fn baseline_with_prior_empty_notified_still_notifies_new_items() {
+        // The exact ambiguity this fix resolves: `previously_notified` is
+        // empty (nothing was notifiable last time), but a baseline WAS
+        // established. A new notifiable item must still fire — the old
+        // `!notified.is_empty()` check got this wrong (treated an empty
+        // `notified` as "never seeded" and silently skipped forever).
+        let notified = keys_to_notify(true, &[], &["new-item".to_string()]);
+        assert_eq!(notified, vec!["new-item".to_string()]);
+    }
 }
