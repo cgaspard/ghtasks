@@ -293,6 +293,9 @@ export interface InboxItem {
   reason: string;
   category: InboxCategory;
   is_pr: boolean;
+  /** True if the subject is a concrete Issue/PR (has a number, links to it).
+   * False for CheckSuite/Release/Discussion — those link to the repo. */
+  addressable: boolean;
   /** GitHub notification thread id (for mark-read sync). */
   thread_id: string;
   /** Whether the notification is unread. */

@@ -63,6 +63,10 @@ pub struct InboxItem {
     pub category: InboxCategory,
     /// True if the underlying subject is a pull request.
     pub is_pr: bool,
+    /// True if the subject is a concrete Issue/PR (so it has a number, links to
+    /// the item, and can be open-state-checked). False for CheckSuite / Release
+    /// / Discussion / subject-less notifications, which link to the repo.
+    pub addressable: bool,
     /// GitHub notification thread id (for mark-read sync).
     pub thread_id: String,
     /// Whether the notification is unread (drives the unread badge + styling).
@@ -76,10 +80,15 @@ impl InboxItem {
         &self.issue.node_id
     }
 
-    /// Whether this item should raise a desktop notification (new + unread +
-    /// a needs-response category).
+    /// Whether this item should raise a desktop notification: it must be unread
+    /// and either a needs-response category OR a CI-activity update (per user
+    /// preference — build failures/completions ping). Other noisy reasons
+    /// (subscribed / author / state_change / manual) do not ping.
     pub fn is_notifiable(&self) -> bool {
-        self.unread && self.category.is_notifiable()
+        if !self.unread {
+            return false;
+        }
+        self.category.is_notifiable() || self.reason == "ci_activity"
     }
 
     /// Desktop-notification (title, body). OS notifications on desktop can't
@@ -94,20 +103,33 @@ impl InboxItem {
             .unwrap_or("");
         let n = self.issue.number;
         let title = &self.issue.title;
-        let kind = if self.is_pr { "PR" } else { "issue" };
         let heading = match self.category {
             InboxCategory::ReviewRequested => "Review requested",
             InboxCategory::Mentioned => "You were mentioned",
             InboxCategory::Participating => "New reply",
             InboxCategory::Assigned => "Assigned to you",
-            InboxCategory::Other => "Notification",
+            InboxCategory::Other if self.reason == "ci_activity" => "CI activity",
+            InboxCategory::Other => "GitHub notification",
         };
-        let body = format!("{repo} {kind} #{n} · {title} — open GH Tasks to view");
+        // Addressable items lead with "repo PR/issue #N"; subject-less ones
+        // (CI runs, releases, …) just lead with the repo.
+        let reference = if self.addressable {
+            let kind = if self.is_pr { "PR" } else { "issue" };
+            format!("{repo} {kind} #{n}")
+        } else {
+            repo.to_string()
+        };
+        let body = format!("{reference} · {title} — open GH Tasks to view");
         (heading.to_string(), body)
     }
 
-    /// `(owner, name, number)` for the state-lookup query.
+    /// `(owner, name, number)` for the state-lookup query — only for concrete
+    /// Issue/PR items. Non-addressable items (CheckSuite/Release/…) have no
+    /// number to check, so they're skipped by the open-state filter.
     fn repo_parts(&self) -> Option<(String, String, u64)> {
+        if !self.addressable {
+            return None;
+        }
         let url = self.issue.repository_url.as_deref()?;
         let tail = url.split("/repos/").nth(1)?;
         let (owner, name) = tail.split_once('/')?;
@@ -135,17 +157,46 @@ fn parse_subject_url(url: &str) -> Option<(String, u64, bool)> {
     Some((format!("{owner}/{name}"), number, is_pr))
 }
 
-/// Build an `InboxItem` from a notification, or `None` if the subject isn't an
-/// addressable issue/PR (skip Release/Discussion/CheckSuite/etc.).
+/// Build an `InboxItem` from any notification — mirrors github.com/notifications
+/// fully (Issues, PRs, CheckSuites, Releases, Discussions, …). Items whose
+/// subject is a real Issue/PR get a link to it and are eligible for the
+/// open-state filter; everything else links to the repo and is `addressable:
+/// false` (we can't GraphQL-check its state).
 fn item_from_notification(n: &Notification) -> Option<InboxItem> {
-    if n.subject.subject_type != "Issue" && n.subject.subject_type != "PullRequest" {
-        return None;
-    }
-    let url = n.subject.url.as_deref()?;
-    let (repo, number, is_pr) = parse_subject_url(url)?;
+    let repo = n.repository.full_name.clone();
     let (owner, name) = repo.split_once('/')?;
-    let path = if is_pr { "pull" } else { "issues" };
-    let html_url = format!("https://github.com/{owner}/{name}/{path}/{number}");
+
+    // Try to resolve a concrete Issue/PR from the subject.
+    let issue_pr = if n.subject.subject_type == "Issue"
+        || n.subject.subject_type == "PullRequest"
+    {
+        n.subject
+            .url
+            .as_deref()
+            .and_then(parse_subject_url)
+            .map(|(_repo, number, is_pr)| (number, is_pr))
+    } else {
+        None
+    };
+
+    let (number, is_pr, html_url, addressable) = match issue_pr {
+        Some((number, is_pr)) => {
+            let path = if is_pr { "pull" } else { "issues" };
+            (
+                number,
+                is_pr,
+                format!("https://github.com/{owner}/{name}/{path}/{number}"),
+                true,
+            )
+        }
+        // CheckSuite / Release / Discussion / subject-less → link to the repo.
+        None => (
+            0,
+            false,
+            format!("https://github.com/{owner}/{name}"),
+            false,
+        ),
+    };
 
     let issue = Issue {
         id: 0,
@@ -174,6 +225,7 @@ fn item_from_notification(n: &Notification) -> Option<InboxItem> {
     Some(InboxItem {
         category: InboxCategory::from_reason(&n.reason),
         is_pr,
+        addressable,
         thread_id: n.id.clone(),
         unread: n.unread,
         event_at: n.updated_at.clone(),
@@ -235,6 +287,15 @@ mod tests {
     use super::*;
 
     fn notif(reason: &str, subject_type: &str, url: &str, unread: bool) -> Notification {
+        notif_opt(reason, subject_type, Some(url), unread)
+    }
+
+    fn notif_opt(
+        reason: &str,
+        subject_type: &str,
+        url: Option<&str>,
+        unread: bool,
+    ) -> Notification {
         use crate::github::{NotificationRepo, NotificationSubject};
         Notification {
             id: "N1".into(),
@@ -243,7 +304,7 @@ mod tests {
             updated_at: "2026-06-25T09:00:00Z".into(),
             subject: NotificationSubject {
                 title: "T".into(),
-                url: Some(url.into()),
+                url: url.map(|u| u.into()),
                 subject_type: subject_type.into(),
             },
             repository: NotificationRepo {
@@ -303,6 +364,27 @@ mod tests {
         ))
         .unwrap();
         assert!(!assigned.is_notifiable());
+
+        // CI activity DOES ping (user preference), even though its category is
+        // Other and it's not addressable.
+        let ci = item_from_notification(&notif_opt(
+            "ci_activity",
+            "CheckSuite",
+            None,
+            true,
+        ))
+        .unwrap();
+        assert!(ci.is_notifiable(), "ci_activity should ping");
+
+        // But other Other-category reasons (subscribed) do NOT ping.
+        let sub = item_from_notification(&notif(
+            "subscribed",
+            "PullRequest",
+            "https://api.github.com/repos/o/r/pulls/1",
+            true,
+        ))
+        .unwrap();
+        assert!(!sub.is_notifiable());
     }
 
     #[test]
@@ -315,6 +397,7 @@ mod tests {
         ))
         .unwrap();
         assert!(item.is_pr);
+        assert!(item.addressable);
         assert_eq!(item.issue.number, 1490);
         assert_eq!(item.reason, "review_requested");
         assert_eq!(item.key(), "notif:N1");
@@ -325,14 +408,30 @@ mod tests {
     }
 
     #[test]
-    fn non_issue_subjects_skipped() {
-        assert!(item_from_notification(&notif(
-            "mention",
-            "Release",
-            "https://api.github.com/repos/o/r/releases/1",
-            true
+    fn non_issue_subjects_are_shown_but_not_addressable() {
+        // A CheckSuite / CI notification (null subject url) still appears in the
+        // inbox — it links to the repo and is not open-state-checked.
+        let ci = item_from_notification(&notif_opt(
+            "ci_activity",
+            "CheckSuite",
+            None,
+            true,
         ))
-        .is_none());
+        .expect("CheckSuite items are now shown");
+        assert!(!ci.addressable);
+        assert_eq!(ci.issue.number, 0);
+        assert_eq!(ci.issue.html_url, "https://github.com/safeevac/monorepo");
+        assert!(ci.repo_parts().is_none(), "non-addressable → skipped by state filter");
+
+        // A Release is likewise shown (links to the repo).
+        let rel = item_from_notification(&notif(
+            "subscribed",
+            "Release",
+            "https://api.github.com/repos/safeevac/monorepo/releases/1",
+            true,
+        ))
+        .expect("Release items are shown");
+        assert!(!rel.addressable);
     }
 
     #[test]

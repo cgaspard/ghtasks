@@ -11,8 +11,8 @@ test.describe("inbox", () => {
     await mountApp();
     const tab = page.getByRole("button", { name: /Inbox/ });
     await expect(tab).toBeVisible();
-    // 5 items, 4 unread (#70 is read).
-    await expect(tab.locator(".await-count")).toHaveText("4");
+    // 6 items, 5 unread (#70 is read).
+    await expect(tab.locator(".await-count")).toHaveText("5");
   });
 
   test("lists all reasons with quiet reason labels + chips", async ({
@@ -39,6 +39,24 @@ test.describe("inbox", () => {
     // No loud dot/pill inside the tab.
     await expect(page.locator(".awaiting-dot")).toHaveCount(0);
     await expect(page.locator(".await-badge")).toHaveCount(0);
+  });
+
+  test("shows non-issue notifications (CheckSuite / CI activity) too", async ({
+    mountApp,
+    page,
+  }) => {
+    await mountApp();
+    await page.getByRole("button", { name: /Inbox/ }).click();
+
+    // A CI-activity/CheckSuite notification (no linked issue/PR) still appears
+    // — the inbox mirrors github.com/notifications fully.
+    const row = page
+      .locator("li.issue")
+      .filter({ hasText: "CI workflow run failed for main" });
+    await expect(row).toBeVisible();
+    await expect(row.locator(".reason")).toHaveText("CI activity");
+    // Non-addressable → no "#number" is shown (it links to the repo).
+    await expect(row.locator(".num")).toHaveCount(0);
   });
 
   test("Unread chip filters to unread only", async ({ mountApp, page }) => {
@@ -120,9 +138,9 @@ test.describe("inbox", () => {
     expect(marked).toContain("AWAIT_92");
 
     await expect(row).toHaveCount(0);
-    // 4 unread → 3 after clearing #92.
+    // 5 unread → 4 after clearing #92.
     const tab = page.getByRole("button", { name: /Inbox/ });
-    await expect(tab.locator(".await-count")).toHaveText("3");
+    await expect(tab.locator(".await-count")).toHaveText("4");
   });
 
   test("empty inbox → badge hidden + friendly empty state", async ({

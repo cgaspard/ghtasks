@@ -261,6 +261,7 @@ export const INBOX_ITEMS = [
     }),
     reason: "review_requested",
     category: "review_requested",
+    addressable: true,
     thread_id: "T92",
     unread: true,
     is_pr: true,
@@ -274,6 +275,7 @@ export const INBOX_ITEMS = [
     }),
     reason: "mention",
     category: "mentioned",
+    addressable: true,
     thread_id: "T88",
     unread: true,
     is_pr: true,
@@ -287,6 +289,7 @@ export const INBOX_ITEMS = [
     }),
     reason: "comment",
     category: "participating",
+    addressable: true,
     thread_id: "T70",
     unread: false, // already read — shows dimmed
     is_pr: true,
@@ -302,6 +305,7 @@ export const INBOX_ITEMS = [
     }),
     reason: "assign",
     category: "assigned",
+    addressable: true,
     thread_id: "T1371",
     unread: true,
     is_pr: false,
@@ -317,9 +321,26 @@ export const INBOX_ITEMS = [
     }),
     reason: "subscribed",
     category: "other",
+    addressable: true,
     thread_id: "T55",
     unread: true,
     is_pr: true,
     event_at: "2026-06-19T09:00:00Z",
+  },
+  {
+    // A CheckSuite / CI-activity notification — no linked issue/PR. Shows in the
+    // inbox (full mirror), links to the repo, and IS a desktop-notify trigger.
+    issue: makeIssue({
+      number: 0,
+      title: "CI workflow run failed for main",
+      html_url: "https://github.com/octocat/hello-world",
+    }),
+    reason: "ci_activity",
+    category: "other",
+    addressable: false,
+    thread_id: "TCI",
+    unread: true,
+    is_pr: false,
+    event_at: "2026-06-18T09:00:00Z",
   },
 ];

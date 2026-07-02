@@ -102,15 +102,20 @@
     await openUrl(issue.html_url);
   }
 
-  function drillIn(issue: Issue) {
-    const repo = repoFullName(issue);
-    if (!repo) return;
-    markSeen(issue);
+  /** The chevron opens the item. Concrete issues/PRs drill into the in-app
+   * detail view; non-addressable items (CI runs, releases, …) open on GitHub. */
+  async function drillIn(item: InboxItem) {
+    markSeen(item.issue);
+    const repo = repoFullName(item.issue);
+    if (!item.addressable || !repo) {
+      await openUrl(item.issue.html_url);
+      return;
+    }
     $appView = {
       kind: "detail",
       repo,
-      number: issue.number,
-      nodeId: issue.node_id,
+      number: item.issue.number,
+      nodeId: item.issue.node_id,
     };
   }
 </script>
@@ -175,7 +180,7 @@
                 class="drill"
                 title="View on GitHub"
                 aria-label="View on GitHub"
-                onclick={() => drillIn(item.issue)}
+                onclick={() => drillIn(item)}
               >
                 <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
                   <path
@@ -191,9 +196,9 @@
                   >·</span
                 >{/if}
               <span class="repo-num"
-                >{repoFullName(item.issue) ?? ""}<span class="num"
-                  >#{item.issue.number}</span
-                ></span
+                >{repoFullName(item.issue) ?? ""}{#if item.addressable}<span
+                    class="num">#{item.issue.number}</span
+                  >{/if}</span
               >
               <span class="sep">·</span>
               <span class="time">{relTime(item.event_at)}</span>
