@@ -1,9 +1,23 @@
 <script lang="ts">
   import { openUrl } from "@tauri-apps/plugin-opener";
-  import { api, repoFullName, type InboxItem, type Issue } from "../api";
-  import { inbox, rowDensity, appView, inboxHasMore, inboxLoadingMore } from "../stores";
+  import {
+    api,
+    repoFullName,
+    type InboxCategory,
+    type InboxItem,
+    type Issue,
+  } from "../api";
+  import {
+    inbox,
+    rowDensity,
+    appView,
+    inboxHasMore,
+    inboxLoadingMore,
+    inboxCategoryFilters,
+    inboxUnreadOnly,
+  } from "../stores";
   import LinkedBadges from "./LinkedBadges.svelte";
-  import Select from "./Select.svelte";
+  import FilterPicker from "./FilterPicker.svelte";
 
   let { onLoadMore }: { onLoadMore: () => void | Promise<void> } = $props();
 
@@ -34,15 +48,8 @@
     }
   }
 
-  // Filter chips mirror github.com/notifications default filters, plus Unread.
-  type Chip =
-    | "all"
-    | "unread"
-    | "review_requested"
-    | "mentioned"
-    | "participating"
-    | "assigned";
-  let chip: Chip = $state("all");
+  // Category filters mirror github.com/notifications default filters. Unread
+  // is orthogonal (read-state, not a category) and lives in its own toggle.
   let searchQuery = $state("");
 
   /** Client-side filter over loaded items only — GitHub's Notifications API
@@ -58,45 +65,44 @@
     );
   }
 
-  function inChip(item: InboxItem, c: Chip): boolean {
-    switch (c) {
-      case "all":
-        return true;
-      case "unread":
-        return item.unread;
-      case "review_requested":
-        return item.category === "review_requested";
-      case "mentioned":
-        return item.category === "mentioned";
-      case "participating":
-        return item.category === "participating";
-      case "assigned":
-        return item.category === "assigned";
-    }
-  }
-
-  const counts = $derived({
-    all: $inbox.length,
-    unread: $inbox.filter((i) => i.unread).length,
-    review_requested: $inbox.filter((i) => inChip(i, "review_requested")).length,
-    mentioned: $inbox.filter((i) => inChip(i, "mentioned")).length,
-    participating: $inbox.filter((i) => inChip(i, "participating")).length,
-    assigned: $inbox.filter((i) => inChip(i, "assigned")).length,
-  });
-  const CHIPS: { key: Chip; label: string }[] = [
-    { key: "all", label: "All" },
-    { key: "unread", label: "Unread" },
+  // Every category, in github.com/notifications order. `other` bundles the
+  // remaining reasons (subscribed, CI activity, releases, state changes, …) —
+  // on a typical inbox that's the bulk of the list, so it needs to be
+  // filterable (both to isolate and to exclude), not just an "All"-only bucket.
+  const CATEGORIES: { key: InboxCategory; label: string }[] = [
     { key: "review_requested", label: "Review requested" },
     { key: "mentioned", label: "Mentioned" },
     { key: "participating", label: "Participating" },
     { key: "assigned", label: "Assigned" },
+    { key: "other", label: "Subscribed & other" },
   ];
-  const chipOptions = $derived(
-    CHIPS.map((c) => ({ value: c.key, label: c.label, badge: counts[c.key] })),
+
+  const counts = $derived(
+    Object.fromEntries(
+      CATEGORIES.map((c) => [
+        c.key,
+        $inbox.filter((i) => i.category === c.key).length,
+      ]),
+    ) as Record<InboxCategory, number>,
   );
 
+  const categoryOptions = $derived(
+    CATEGORIES.map((c) => ({
+      value: c.key,
+      label: c.label,
+      count: counts[c.key],
+    })),
+  );
+
+  // Empty category set = all categories. Unread toggle AND-narrows.
+  function inFilter(item: InboxItem): boolean {
+    if ($inboxUnreadOnly && !item.unread) return false;
+    if ($inboxCategoryFilters.size === 0) return true;
+    return $inboxCategoryFilters.has(item.category);
+  }
+
   const filtered = $derived(
-    $inbox.filter((i) => inChip(i, chip) && matchesSearch(i, searchQuery.trim())),
+    $inbox.filter((i) => inFilter(i) && matchesSearch(i, searchQuery.trim())),
   );
 
   function relTime(iso: string): string {
@@ -146,12 +152,16 @@
 
   // Infinite scroll: observe a sentinel at the bottom of the list and load
   // the next page when it enters the scroll container's viewport. Only wired
-  // up while unfiltered ("All", no search) — chip/search filters operate on
-  // already-loaded items, so scrolling under a filter shouldn't silently
-  // fetch unrelated pages the user can't see the effect of.
+  // up while fully unfiltered (no category, no unread-only, no search) —
+  // category/unread/search filters operate on already-loaded items, so
+  // scrolling under a filter shouldn't silently fetch unrelated pages the
+  // user can't see the effect of.
   let sentinel: HTMLElement | null = $state(null);
   const canLoadMore = $derived(
-    chip === "all" && searchQuery.trim() === "" && $inboxHasMore,
+    $inboxCategoryFilters.size === 0 &&
+      !$inboxUnreadOnly &&
+      searchQuery.trim() === "" &&
+      $inboxHasMore,
   );
 
   $effect(() => {
@@ -171,13 +181,25 @@
   {#if $inbox.length > 0}
     <div class="toolbar">
       <div class="filter">
-        <Select
-          value={chip}
-          options={chipOptions}
-          onChange={(v) => (chip = v)}
-          searchable={false}
-          minWidth={150}
+        <FilterPicker
+          label="Category"
+          emptyLabel="All"
+          options={categoryOptions}
+          selected={$inboxCategoryFilters}
+          onChange={(next) => ($inboxCategoryFilters = next)}
         />
+        <button
+          class="unread-toggle"
+          class:active={$inboxUnreadOnly}
+          onclick={() => ($inboxUnreadOnly = !$inboxUnreadOnly)}
+          aria-pressed={$inboxUnreadOnly}
+          title="Show only unread notifications"
+        >
+          <span class="unread-check" aria-hidden="true">
+            {#if $inboxUnreadOnly}✓{/if}
+          </span>
+          Unread only
+        </button>
       </div>
       <div class="search">
         <svg
@@ -326,6 +348,48 @@
   }
   .filter {
     flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  /* Read-state toggle — visually a sibling pill to the FilterPicker trigger,
+     matching its size/shape so the two read as one filter cluster. */
+  .unread-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--text-dim);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .unread-toggle:hover {
+    color: var(--text);
+  }
+  .unread-toggle.active {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  .unread-check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    font-size: 9px;
+    line-height: 1;
+    flex: 0 0 auto;
+  }
+  .unread-toggle.active .unread-check {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
   }
   .search {
     position: relative;

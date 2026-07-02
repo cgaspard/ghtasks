@@ -4,14 +4,22 @@ import { INBOX_PAGE_2 } from "./fixtures/mockData";
 
 // The Inbox tab mirrors github.com/notifications. The default scenario seeds 5
 // items across reasons (review_requested #92, mention #88, comment #70 [read],
-// assign #1371, subscribed #55). The tab badge counts UNREAD (4). The filter
-// dropdown mirrors GitHub's inbox filters (All / Unread / Review requested /
-// Mentioned / Participating / Assigned).
+// assign #1371, subscribed #55). The tab badge counts UNREAD (4). The Category
+// filter is a multi-select checkbox popover (Review requested / Mentioned /
+// Participating / Assigned; empty = All), with a separate "Unread only" toggle.
 
-/** Open the Inbox filter dropdown and pick an option by its visible label. */
-async function pickFilter(page: Page, label: string) {
-  await page.locator(".filter .trigger").click();
+/** Open the Category filter popover and toggle a category checkbox by label.
+ * The popover stays open after a click (multi-select), so this can be chained. */
+async function pickCategory(page: Page, label: string) {
+  const trigger = page.locator(".filter .trigger");
+  const menu = page.locator(".filter .menu");
+  if (!(await menu.isVisible())) await trigger.click();
   await page.locator(".filter .opt", { hasText: label }).click();
+}
+
+/** Flip the "Unread only" toggle. */
+async function toggleUnreadOnly(page: Page) {
+  await page.locator(".filter .unread-toggle").click();
 }
 
 test.describe("inbox", () => {
@@ -66,44 +74,75 @@ test.describe("inbox", () => {
     await expect(row.locator(".num")).toHaveCount(0);
   });
 
-  test("Unread filter option filters to unread only", async ({
+  test("Unread only toggle filters to unread items", async ({
     mountApp,
     page,
   }) => {
     await mountApp();
     await page.getByRole("button", { name: /Inbox/ }).click();
-    await pickFilter(page, "Unread");
+    await toggleUnreadOnly(page);
 
-    // #70 (read) is hidden; the 4 unread remain.
+    // #70 (read) is hidden; the unread items remain.
     await expect(page.getByText("Split the sync engine into stages")).toHaveCount(0);
     await expect(page.getByText("Fix the login flow")).toBeVisible();
+
+    // Toggling off restores the read item.
+    await toggleUnreadOnly(page);
+    await expect(
+      page.getByText("Split the sync engine into stages"),
+    ).toBeVisible();
   });
 
-  test("Assigned filter option is its own filter", async ({
+  test("Assigned category checkbox is its own filter", async ({
     mountApp,
     page,
   }) => {
     await mountApp();
     await page.getByRole("button", { name: /Inbox/ }).click();
-    await pickFilter(page, "Assigned");
+    await pickCategory(page, "Assigned");
     await expect(
       page.getByText("Bug: browser controls missing on facility windows"),
     ).toBeVisible();
     await expect(page.getByText("Fix the login flow")).toHaveCount(0);
   });
 
-  test("filter trigger shows the current selection + count", async ({
+  test("Subscribed & other checkbox isolates the 'other'-category items", async ({
     mountApp,
     page,
   }) => {
     await mountApp();
     await page.getByRole("button", { name: /Inbox/ }).click();
+    await pickCategory(page, "Subscribed & other");
+    // #55 (subscribed) and the CI-activity item are the 'other' category.
+    await expect(page.getByText("Bump dependencies")).toBeVisible();
+    await expect(page.getByText("CI workflow run failed for main")).toBeVisible();
+    // A review_requested item is now excluded.
+    await expect(page.getByText("Fix the login flow")).toHaveCount(0);
+  });
+
+  test("categories are multi-select and combine (OR) with counts shown", async ({
+    mountApp,
+    page,
+  }) => {
+    await mountApp();
+    await page.getByRole("button", { name: /Inbox/ }).click();
+    // Empty selection reads as "All".
     await expect(page.locator(".filter .trigger")).toHaveText(/All/);
 
     await page.locator(".filter .trigger").click();
-    await expect(page.locator(".filter .opt-badge").first()).toBeVisible();
-    await page.locator(".filter .opt", { hasText: "Unread" }).click();
-    await expect(page.locator(".filter .trigger")).toHaveText(/Unread/);
+    // Per-option counts render.
+    await expect(page.locator(".filter .opt-count").first()).toBeVisible();
+
+    // Check two categories — both their items show (OR), not one XOR the other.
+    await pickCategory(page, "Review requested");
+    await pickCategory(page, "Assigned");
+    await expect(page.locator(".filter .trigger")).toHaveText(/2 selected/);
+    await expect(page.getByText("Fix the login flow")).toBeVisible(); // review_requested
+    await expect(
+      page.getByText("Bug: browser controls missing on facility windows"),
+    ).toBeVisible(); // assigned
+    // The mentioned item (#88) is excluded by the two-category selection.
+    await expect(page.getByText("Rework the OAuth callback")).toHaveCount(0);
   });
 
   test("read items are dimmed but still listed", async ({ mountApp, page }) => {

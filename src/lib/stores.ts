@@ -218,6 +218,18 @@ export const inboxLoadingMore = writable(false);
 /** Highest inbox page fetched so far (1 = only the live refresh page). */
 export const inboxPage = writable(1);
 
+/** Inbox category filter (Review requested / Mentioned / Participating /
+ * Assigned). Empty set = all categories. Persisted. */
+export const inboxCategoryFilters = persistent<Set<string>>(
+  "inboxCategoryFilters",
+  new Set(),
+  stringSetCodec,
+);
+
+/** Inbox "Unread only" toggle — narrows whatever categories are selected.
+ * Orthogonal to category (read-state, not a category). Persisted. */
+export const inboxUnreadOnly = persistent<boolean>("inboxUnreadOnly", false);
+
 /** Unread notification count — drives the Inbox tab badge, like GitHub. */
 export const unreadCount = derived(
   inbox,
