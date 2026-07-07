@@ -113,34 +113,46 @@
   }
 
   /* ---- platform strip ---- */
-  .platforms { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 40px; color: var(--text-dim); font-size: 13px; }
-  .platforms span { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); }
-  .platforms .k { color: var(--text); }
+  /* Trust pills under the hero CTAs — readable filled chips, not dim mono text. */
+  .trust { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 34px; }
+  .trust .pill {
+    font-size: 13px; color: var(--text-body); background: var(--bg-elev);
+    border: 1px solid var(--border); border-radius: 999px; padding: 6px 13px;
+  }
 
   /* ---- section scaffold ---- */
   section { padding: 72px 0; }
   .kicker {
-    font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase;
-    color: var(--text-dim); display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px;
+    font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+    color: #7fb0ff; display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px;
   }
   .kicker .bar { width: 22px; height: 2px; border-radius: 2px; background: var(--accent); }
   h2 { font-size: clamp(26px, 3.4vw, 36px); letter-spacing: -0.02em; line-height: 1.12; text-wrap: balance; }
   .section-intro { color: var(--text-body); max-width: 34em; margin-top: 12px; font-size: 17px; }
 
-  /* feature rows: alternating text / framed shot */
-  .feature { display: grid; grid-template-columns: 1fr 1.15fr; gap: 48px; align-items: center; }
-  .feature + .feature { margin-top: 64px; }
+  /* feature rows: alternating text / framed shot.
+     Each row sits on a faintly elevated, bordered panel so the framed shots
+     don't dissolve into the page's near-black (the "everything's murky
+     dark-on-dark" problem). */
+  .feature {
+    display: grid; grid-template-columns: 1fr 1.15fr; gap: 48px; align-items: center;
+    background: var(--bg-elev); border: 1px solid var(--border); border-radius: 16px;
+    padding: 36px 40px;
+  }
+  .feature + .feature { margin-top: 24px; }
   .feature.flip .copy { order: 2; }
   .feature.flip .art { order: 1; }
   .feature h3 { font-size: 23px; letter-spacing: -0.01em; margin-bottom: 12px; }
   .feature p { color: var(--text-body); font-size: 16px; }
-  .feature .art img { border-radius: 12px; box-shadow: 0 30px 70px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04); }
+  .feature .art img { border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.05); }
   /* status-vocabulary chips reused from the app */
   .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
-  .chip { font-family: var(--mono); font-size: 12px; padding: 3px 9px; border-radius: 6px; border: 1px solid var(--border); color: var(--text-dim); }
-  .chip.open { color: var(--open); border-color: color-mix(in srgb, var(--open) 40%, var(--border)); }
-  .chip.merged { color: var(--merged); border-color: color-mix(in srgb, var(--merged) 40%, var(--border)); }
-  .chip.progress { color: var(--progress); border-color: color-mix(in srgb, var(--progress) 40%, var(--border)); }
+  /* Filled pills (a tinted background, not just colored text on black) so they
+     read as solid at a glance — mirrors the app's real status pills. */
+  .chip { font-family: var(--mono); font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; border: 1px solid transparent; }
+  .chip.open { color: #7ee787; background: color-mix(in srgb, var(--open) 22%, transparent); border-color: color-mix(in srgb, var(--open) 45%, transparent); }
+  .chip.merged { color: #d2b3ff; background: color-mix(in srgb, var(--merged) 24%, transparent); border-color: color-mix(in srgb, var(--merged) 50%, transparent); }
+  .chip.progress { color: #f0c860; background: color-mix(in srgb, var(--progress) 22%, transparent); border-color: color-mix(in srgb, var(--progress) 45%, transparent); }
 
   /* ---- demo ---- */
   .demo { text-align: center; background: var(--bg-elev); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
@@ -207,15 +219,15 @@
     <div>
       <span class="eyebrow"><span class="dot"></span> menu-bar · macOS · Windows · Linux</span>
       <h1>Your GitHub issues, <span class="accent">one keystroke away.</span></h1>
-      <p class="lede"><b style="color:var(--text)">GH Tasks</b> is a menu-bar app for macOS, Windows, and Linux that puts your GitHub Issues, Projects boards, and notifications inbox in one fast, keyboard-driven list — so you can triage and update work without ever opening a browser tab.</p>
+      <p class="lede"><b style="color:var(--text)">GH Tasks</b> is a menu-bar app for macOS, Windows, and Linux that puts your GitHub Issues, Projects boards, and notifications inbox in one fast, compact list — so you can triage and update work without ever opening a browser tab.</p>
       <div class="cta-row">
         <a class="btn" href="https://github.com/cgaspard/ghtasks/releases/latest">⬇︎ Download free</a>
         <a class="btn secondary" href="#demo">Watch the demo</a>
       </div>
-      <div class="platforms">
-        <span><span class="k">↳</span> Signed &amp; notarized</span>
-        <span><span class="k">↳</span> Device-flow sign-in</span>
-        <span><span class="k">↳</span> Token in your keychain</span>
+      <div class="trust">
+        <span class="pill">Signed &amp; notarized</span>
+        <span class="pill">GitHub device-flow sign-in</span>
+        <span class="pill">Token stored in your keychain</span>
       </div>
     </div>
     <div class="hero-shot">
@@ -282,9 +294,9 @@
 
 <section>
   <div class="wrap">
-    <span class="kicker"><span class="bar"></span> Built for the keyboard</span>
+    <span class="kicker"><span class="bar"></span> Fast &amp; low-friction</span>
     <h2>Speed is the whole point.</h2>
-    <p class="section-intro">Nothing here needs the mouse. The window is small on purpose, fast on purpose, and closes the moment you're done.</p>
+    <p class="section-intro">The window is small on purpose, fast on purpose, and closes the moment you're done. Open it, glance, act, and get back to work.</p>
     <div class="keys">
       <div class="keycard">
         <span class="kbd">click tray</span>
@@ -294,7 +306,7 @@
       <div class="keycard">
         <span class="kbd">type to filter</span>
         <h4>Find it by typing</h4>
-        <p>Filter any list by title, label, or <span style="font-family:var(--mono)">#number</span> as you type — no menus, no clicks.</p>
+        <p>Filter any list by title, label, or <span style="font-family:var(--mono)">#number</span> the moment you start typing — no submit, no reload.</p>
       </div>
       <div class="keycard">
         <span class="kbd">⌘,</span>
