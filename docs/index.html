@@ -17,12 +17,16 @@
     /* Lifted directly from the app's own theme (src/app.css) so the page
        reads as the product's surface, not a generic dark landing template. */
     --bg: #0f1116;
-    --bg-elev: #171a21;
-    --bg-hover: #1f232c;
-    --border: #2a2f3a;
-    --text: #e6e6e6;
-    --text-dim: #9aa0ac;
-    --accent: #4f8cff;
+    --bg-elev: #191d26;
+    --bg-hover: #222735;
+    --border: #313846;
+    --text: #f2f3f6;
+    /* Readable body copy — brighter than the app's dim tone so paragraphs on a
+       dark ground don't read as muted/inactive (10:1+ contrast on both grounds). */
+    --text-body: #c4cbd6;
+    /* Reserved for small meta labels only, not running text. */
+    --text-dim: #aab2be;
+    --accent: #5b96ff;
     --accent-dim: #2b4a84;
     /* The app's status vocabulary — used as small, meaningful accents. */
     --open: #3fb950;
@@ -97,7 +101,7 @@
     text-wrap: balance; margin-bottom: 20px;
   }
   h1 .accent { color: var(--accent); }
-  .lede { font-size: clamp(16px, 1.8vw, 19px); color: var(--text-dim); max-width: 30em; margin-bottom: 30px; }
+  .lede { font-size: clamp(17px, 1.9vw, 20px); color: var(--text-body); max-width: 30em; margin-bottom: 30px; }
   .cta-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
   .cta-note { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
   .cta-note b { color: var(--text); font-weight: 600; }
@@ -121,15 +125,15 @@
   }
   .kicker .bar { width: 22px; height: 2px; border-radius: 2px; background: var(--accent); }
   h2 { font-size: clamp(26px, 3.4vw, 36px); letter-spacing: -0.02em; line-height: 1.12; text-wrap: balance; }
-  .section-intro { color: var(--text-dim); max-width: 34em; margin-top: 12px; font-size: 16px; }
+  .section-intro { color: var(--text-body); max-width: 34em; margin-top: 12px; font-size: 17px; }
 
   /* feature rows: alternating text / framed shot */
   .feature { display: grid; grid-template-columns: 1fr 1.15fr; gap: 48px; align-items: center; }
-  .feature + .feature { margin-top: 84px; }
+  .feature + .feature { margin-top: 64px; }
   .feature.flip .copy { order: 2; }
   .feature.flip .art { order: 1; }
   .feature h3 { font-size: 23px; letter-spacing: -0.01em; margin-bottom: 12px; }
-  .feature p { color: var(--text-dim); }
+  .feature p { color: var(--text-body); font-size: 16px; }
   .feature .art img { border-radius: 12px; box-shadow: 0 30px 70px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04); }
   /* status-vocabulary chips reused from the app */
   .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
@@ -141,7 +145,7 @@
   /* ---- demo ---- */
   .demo { text-align: center; background: var(--bg-elev); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
   .demo h2 { margin-bottom: 10px; }
-  .demo p { color: var(--text-dim); margin-bottom: 30px; }
+  .demo p { color: var(--text-body); margin-bottom: 30px; font-size: 16px; }
   .demo img { margin: 0 auto; border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,0.5); }
 
   /* ---- keystroke motif band ---- */
@@ -153,12 +157,12 @@
     border-radius: 6px; padding: 3px 8px; color: var(--text); margin-bottom: 14px;
   }
   .keycard h4 { font-size: 16px; margin-bottom: 6px; letter-spacing: -0.01em; }
-  .keycard p { color: var(--text-dim); font-size: 14px; }
+  .keycard p { color: var(--text-body); font-size: 14.5px; }
 
   /* ---- download ---- */
   .download { text-align: center; }
   .download h2 { margin-bottom: 12px; }
-  .download p { color: var(--text-dim); max-width: 34em; margin: 0 auto 28px; }
+  .download p { color: var(--text-body); max-width: 34em; margin: 0 auto 28px; font-size: 16px; }
   .dl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 720px; margin: 0 auto; text-align: left; }
   .dl {
     display: block; border: 1px solid var(--border); background: var(--bg-elev); border-radius: 12px;
@@ -203,7 +207,7 @@
     <div>
       <span class="eyebrow"><span class="dot"></span> menu-bar · macOS · Windows · Linux</span>
       <h1>Your GitHub issues, <span class="accent">one keystroke away.</span></h1>
-      <p class="lede">A fast, keyboard-friendly menu-bar app that folds GitHub Issues, Projects, and your notifications inbox into a single task list. Open in a tap, gone when you're done — no browser tab, no context switch.</p>
+      <p class="lede"><b style="color:var(--text)">GH Tasks</b> is a menu-bar app for macOS, Windows, and Linux that puts your GitHub Issues, Projects boards, and notifications inbox in one fast, keyboard-driven list — so you can triage and update work without ever opening a browser tab.</p>
       <div class="cta-row">
         <a class="btn" href="https://github.com/cgaspard/ghtasks/releases/latest">⬇︎ Download free</a>
         <a class="btn secondary" href="#demo">Watch the demo</a>
@@ -215,7 +219,7 @@
       </div>
     </div>
     <div class="hero-shot">
-      <img src="marketing/framed/projects.png" alt="GH Tasks showing a cross-repo Projects board in the menu bar" />
+      <img src="marketing/framed/projects.png" alt="GH Tasks showing a GitHub Projects board in the menu bar, with status pills, priorities, and linked pull requests" />
     </div>
   </div>
 </div>
@@ -295,7 +299,7 @@
       <div class="keycard">
         <span class="kbd">⌘,</span>
         <h4>Settings in a keystroke</h4>
-        <p>Sources, row density, poll interval, launch-at-login — all a shortcut away, all persisted.</p>
+        <p>Sources, row density, default repo, launch-at-login — all a shortcut away, all persisted across relaunches.</p>
       </div>
     </div>
   </div>
