@@ -8,7 +8,9 @@
 
 A fast, keyboard-friendly menu-bar app that turns GitHub **Issues**, **Projects**, and **notifications** into a single task list — anchored to your tray, open in a tap, gone when you're done. No browser tab, no context switch.
 
-[**⬇︎ Download for macOS · Windows · Linux**](https://github.com/cgaspard/ghtasks/releases/latest) &nbsp;·&nbsp; [What's new](release_notes/v0.5.0.md)
+### [ghtasks.com](https://ghtasks.com)
+
+[**⬇︎ Download for macOS · Windows · Linux**](https://github.com/cgaspard/ghtasks/releases/latest) &nbsp;·&nbsp; [Website](https://ghtasks.com) &nbsp;·&nbsp; [What's new](release_notes/v0.5.0.md)
 
 <br />
 
