@@ -41,7 +41,6 @@
   let pollHandle: ReturnType<typeof setInterval> | null = null;
   let updateCheckHandle: ReturnType<typeof setInterval> | null = null;
   let unlistenProjectPage: UnlistenFn | null = null;
-  let unlistenOpenInbox: UnlistenFn | null = null;
   /** Bumped on each refresh. Pages arriving for an older generation are
    * ignored so late stragglers don't leak into the next refresh. */
   let refreshGeneration = 0;
@@ -321,15 +320,6 @@
       unlistenProjectPage = fn;
     });
 
-    // A clicked desktop notification (macOS release build) focuses the app and
-    // fires this event with the item's node_id — jump to the Inbox tab.
-    void listen<string>("open-inbox-item", () => {
-      $appView = { kind: "list" };
-      $activeTab = "inbox";
-    }).then((fn) => {
-      unlistenOpenInbox = fn;
-    });
-
     void getVersion().then((v) => ($appVersion = v));
 
     // Re-hydrate row density from the backend (authoritative); the persistent
@@ -388,7 +378,6 @@
       if (pollHandle) clearInterval(pollHandle);
       if (updateCheckHandle) clearInterval(updateCheckHandle);
       if (unlistenProjectPage) unlistenProjectPage();
-      if (unlistenOpenInbox) unlistenOpenInbox();
       unsubUpdate();
       window.removeEventListener("keydown", onKeydown);
     };

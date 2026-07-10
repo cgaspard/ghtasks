@@ -204,13 +204,12 @@ pub async fn fetch_all(
                     let had_baseline = sources::has_seen_baseline(&app, &src.id);
                     if had_baseline && !new_ids.is_empty() {
                         for issue in new_ids.iter().take(5) {
-                            // Not an inbox item — no node_id target; a click just
-                            // focuses the app.
+                            // A click opens the issue on github.com.
                             notify::send(
                                 &app,
                                 &format!("{}: {}", src.name, issue.title),
                                 &format!("#{} in {}", issue.number, repo),
-                                "",
+                                &issue.html_url,
                             );
                         }
                     }
@@ -380,8 +379,8 @@ pub async fn fetch_inbox(
         for key in keys_to_notify(had_baseline, &notified, &notifiable_ids) {
             if let Some(item) = visible.iter().find(|i| i.key() == key) {
                 let (title, body) = item.notification();
-                // Attach the item's node_id so a click routes to it in the Inbox.
-                notify::send(&app, &title, &body, item.key());
+                // Attach the item's github.com URL so a click opens it there.
+                notify::send(&app, &title, &body, &item.issue.html_url);
             }
         }
         let _ = sources::save_seen(&app, INBOX_NOTIFY_SOURCE, &notifiable_ids);

@@ -128,7 +128,7 @@ impl InboxItem {
         } else {
             repo.to_string()
         };
-        let body = format!("{reference} · {title} — open GH Tasks to view");
+        let body = format!("{reference} · {title} — click to open on GitHub");
         (heading.to_string(), body)
     }
 

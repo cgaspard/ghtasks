@@ -1,7 +1,7 @@
 //! Desktop notifications via the native macOS `UserNotifications` framework
 //! (through the `user-notify` crate), which — unlike `tauri-plugin-notification`
-//! — lets us react to CLICKS. A clicked notification focuses the app and jumps
-//! to the Inbox tab (see `lib.rs` where the click handler is registered).
+//! — lets us react to CLICKS. A clicked notification opens the underlying
+//! issue/PR on github.com in the user's browser (see the click handler below).
 //!
 //! IMPORTANT (macOS): real notifications only fire from a **signed, bundled**
 //! `.app`. In an unbundled `npm run tauri dev` binary the crate returns an
@@ -11,7 +11,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
+use tauri_plugin_opener::OpenerExt;
 use user_notify::{get_notification_manager, NotificationBuilder, NotificationManager};
 
 /// The single process-wide notification manager. Kept alive for the whole
@@ -19,14 +20,15 @@ use user_notify::{get_notification_manager, NotificationBuilder, NotificationMan
 /// on the main thread from `lib.rs`.
 static MANAGER: OnceLock<Arc<dyn NotificationManager>> = OnceLock::new();
 
-/// Event key emitted to the frontend when a notification is clicked.
-pub const OPEN_INBOX_EVENT: &str = "open-inbox-item";
-/// user_info key carrying the clicked item's node_id.
-const USER_INFO_NODE_ID: &str = "node_id";
+/// user_info key carrying the clicked item's github.com URL.
+const USER_INFO_URL: &str = "url";
 
 /// Initialize the notification manager and register the click handler. Call
-/// ONCE, on the MAIN THREAD, during Tauri `setup`. On a clicked notification we
-/// focus the window and emit `OPEN_INBOX_EVENT` with the item's node_id.
+/// ONCE, on the MAIN THREAD, during Tauri `setup`. A clicked notification opens
+/// the item's github.com URL in the browser — it deliberately does NOT show or
+/// focus the app window, so the menu-bar app stays out of the way (and out of
+/// the Dock: focusing the window from a notification-triggered OS activation
+/// was promoting the app from Accessory to a Dock-visible foreground app).
 pub fn init(app: &AppHandle, bundle_id: &str) {
     let manager = get_notification_manager(bundle_id.to_string(), None);
 
@@ -37,14 +39,18 @@ pub fn init(app: &AppHandle, bundle_id: &str) {
             if response.action != DefaultAction {
                 return; // ignore dismiss / action buttons
             }
-            // Focus + position the window under the tray, then navigate.
-            crate::tray::show_at_tray(&app_for_click);
-            let node_id = response
-                .user_info
-                .get(USER_INFO_NODE_ID)
-                .cloned()
-                .unwrap_or_default();
-            let _ = app_for_click.emit(OPEN_INBOX_EVENT, node_id);
+            let Some(url) = response.user_info.get(USER_INFO_URL) else {
+                return; // no URL attached — nothing to open
+            };
+            if let Err(e) = app_for_click.opener().open_url(url, None::<&str>) {
+                log::warn!("notify: failed to open {url}: {e}");
+            }
+            // Clicking a notification makes macOS activate the app; re-assert
+            // the menu-bar-only policy so a Dock icon doesn't linger.
+            #[cfg(target_os = "macos")]
+            {
+                let _ = app_for_click.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            }
         }),
         vec![], // no action buttons — plain clickable notifications
     );
@@ -77,10 +83,30 @@ pub async fn permission_granted() -> Option<bool> {
     manager.get_notification_permission_state().await.ok()
 }
 
-/// Show a desktop notification. `node_id` (when non-empty) is attached so a
-/// click can route the frontend to that Inbox item. Best-effort: if the manager
+/// Derive a stable notification thread id from a github.com URL, so all
+/// notifications for the same repo collapse into one expandable stack in
+/// Notification Center instead of piling up as separate items. Falls back to a
+/// single app-wide thread when no repo can be parsed.
+fn thread_for(url: &str) -> String {
+    // https://github.com/{owner}/{name}/... -> "{owner}/{name}"
+    url.strip_prefix("https://github.com/")
+        .and_then(|rest| {
+            let mut parts = rest.split('/');
+            let owner = parts.next()?;
+            let name = parts.next()?;
+            if owner.is_empty() || name.is_empty() {
+                return None;
+            }
+            Some(format!("{owner}/{name}"))
+        })
+        .unwrap_or_else(|| "ghtasks".to_string())
+}
+
+/// Show a desktop notification. `url` (when non-empty) is attached so a click
+/// opens it in the browser. Notifications are grouped by repo thread so they
+/// collapse into one stack rather than piling up. Best-effort: if the manager
 /// isn't initialized (or we're the dev mock), this is a no-op / logs only.
-pub fn send(_app: &AppHandle, title: &str, body: &str, node_id: &str) {
+pub fn send(_app: &AppHandle, title: &str, body: &str, url: &str) {
     let Some(manager) = MANAGER.get().cloned() else {
         log::debug!("notify: manager not initialized; skipping '{title}'");
         return;
@@ -88,10 +114,14 @@ pub fn send(_app: &AppHandle, title: &str, body: &str, node_id: &str) {
 
     // `.sound(true)` attaches UNNotificationSound.default — macOS gates it by
     // the per-app notification-sound setting, Focus, and Do Not Disturb.
-    let mut builder = NotificationBuilder::new().title(title).body(body).sound(true);
-    if !node_id.is_empty() {
+    let mut builder = NotificationBuilder::new()
+        .title(title)
+        .body(body)
+        .sound(true)
+        .set_thread_id(&thread_for(url));
+    if !url.is_empty() {
         let mut info = HashMap::new();
-        info.insert(USER_INFO_NODE_ID.to_string(), node_id.to_string());
+        info.insert(USER_INFO_URL.to_string(), url.to_string());
         builder = builder.set_user_info(info);
     }
 
@@ -100,4 +130,29 @@ pub fn send(_app: &AppHandle, title: &str, body: &str, node_id: &str) {
             log::warn!("notify: send failed: {e}");
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::thread_for;
+
+    #[test]
+    fn thread_id_groups_by_repo() {
+        assert_eq!(
+            thread_for("https://github.com/safeevac/monorepo/issues/1228"),
+            "safeevac/monorepo"
+        );
+        assert_eq!(
+            thread_for("https://github.com/safeevac/monorepo/pull/1533"),
+            "safeevac/monorepo"
+        );
+        // repo root (non-addressable items link here)
+        assert_eq!(
+            thread_for("https://github.com/safeevac/monorepo"),
+            "safeevac/monorepo"
+        );
+        // unparseable -> single app-wide thread
+        assert_eq!(thread_for(""), "ghtasks");
+        assert_eq!(thread_for("https://github.com/"), "ghtasks");
+    }
 }
