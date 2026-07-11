@@ -45,11 +45,18 @@ pub fn init(app: &AppHandle, bundle_id: &str) {
             if let Err(e) = app_for_click.opener().open_url(url, None::<&str>) {
                 log::warn!("notify: failed to open {url}: {e}");
             }
-            // Clicking a notification makes macOS activate the app; re-assert
-            // the menu-bar-only policy so a Dock icon doesn't linger.
+            // Clicking a notification makes macOS activate the app, which pops a
+            // Dock icon. Re-assert the menu-bar-only policy — but this handler
+            // runs on `user-notify`'s own worker thread, and AppKit's
+            // `setActivationPolicy` only takes effect on the MAIN thread, so
+            // marshal it there. (The `RunEvent::Reopen` handler in lib.rs is a
+            // second line of defense for activations that don't route here.)
             #[cfg(target_os = "macos")]
             {
-                let _ = app_for_click.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                let app = app_for_click.clone();
+                let _ = app_for_click.run_on_main_thread(move || {
+                    let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                });
             }
         }),
         vec![], // no action buttons — plain clickable notifications

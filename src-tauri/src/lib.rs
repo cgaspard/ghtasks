@@ -201,6 +201,18 @@ pub fn run() {
             commands::install_update,
             commands::set_tray_update_state,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app_handle, _event| {
+            // macOS: when the app is reactivated — e.g. the OS foregrounds it to
+            // deliver a clicked notification, or a stray Dock/⌘-Tab activation —
+            // re-assert the menu-bar-only policy so no Dock icon lingers. This
+            // is the catch-all for activations that don't route through the
+            // notification click handler.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = _event {
+                let _ = _app_handle
+                    .set_activation_policy(tauri::ActivationPolicy::Accessory);
+            }
+        });
 }
