@@ -32,6 +32,7 @@ export const SETTINGS: Settings = {
   window_size: "large",
   row_density: "default",
   notifications_sync: false,
+  beta_updates: false,
 };
 
 let nodeSeq = 1000;

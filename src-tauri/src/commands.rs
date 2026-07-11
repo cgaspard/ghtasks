@@ -859,14 +859,41 @@ pub struct UpdateCheckResult {
     pub body: Option<String>,
 }
 
+/// Update manifest for the stable channel. GitHub's `/releases/latest/` always
+/// resolves to the newest *non-prerelease* release, so stable users never see
+/// betas.
+const STABLE_ENDPOINT: &str =
+    "https://github.com/cgaspard/ghtasks/releases/latest/download/latest.json";
+/// Update manifest for the beta channel. A permanent pre-release tagged `beta`
+/// whose assets CI overwrites on every beta build, so this URL always resolves
+/// to the newest beta.
+const BETA_ENDPOINT: &str =
+    "https://github.com/cgaspard/ghtasks/releases/download/beta/latest-beta.json";
+
+/// Build an updater pointed at the stable or beta manifest per the user's
+/// `beta_updates` setting. Falls back to the tauri.conf.json endpoint (stable)
+/// if the setting can't be read.
+fn channel_updater(app: &AppHandle) -> Result<tauri_plugin_updater::Updater> {
+    use tauri_plugin_updater::UpdaterExt;
+    let beta = sources::load_settings(app)
+        .map(|s| s.beta_updates)
+        .unwrap_or(false);
+    let endpoint = if beta { BETA_ENDPOINT } else { STABLE_ENDPOINT };
+    let url = endpoint
+        .parse()
+        .map_err(|e| crate::error::Error::Other(format!("bad update endpoint: {e}")))?;
+    app.updater_builder()
+        .endpoints(vec![url])
+        .map_err(|e| crate::error::Error::Other(format!("updater endpoints: {e}")))?
+        .build()
+        .map_err(|e| crate::error::Error::Other(format!("updater init: {e}")))
+}
+
 /// Query the configured update endpoint. Returns whether a newer
 /// version exists and its release-notes body.
 #[tauri::command]
 pub async fn check_for_updates(app: AppHandle) -> Result<UpdateCheckResult> {
-    use tauri_plugin_updater::UpdaterExt;
-    let updater = app
-        .updater()
-        .map_err(|e| crate::error::Error::Other(format!("updater init: {e}")))?;
+    let updater = channel_updater(&app)?;
     match updater.check().await {
         Ok(Some(update)) => Ok(UpdateCheckResult {
             available: true,
@@ -901,10 +928,7 @@ pub async fn set_tray_update_state(
 /// then respawns.
 #[tauri::command]
 pub async fn install_update(app: AppHandle) -> Result<()> {
-    use tauri_plugin_updater::UpdaterExt;
-    let updater = app
-        .updater()
-        .map_err(|e| crate::error::Error::Other(format!("updater init: {e}")))?;
+    let updater = channel_updater(&app)?;
     let update = updater
         .check()
         .await

@@ -236,6 +236,7 @@ function installTauriMock(): void {
           window_size: "large",
           row_density: "default",
           notifications_sync: false,
+          beta_updates: false,
         };
       case "save_settings":
         return null;

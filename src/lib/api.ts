@@ -321,6 +321,8 @@ export interface Settings {
   window_size: WindowSize;
   row_density: RowDensity;
   notifications_sync: boolean;
+  /** Receive beta (pre-release) auto-updates instead of stable. */
+  beta_updates: boolean;
 }
 
 const ROW_DENSITIES: RowDensity[] = [

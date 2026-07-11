@@ -102,6 +102,10 @@ pub struct Settings {
     /// default so the app never mutates the inbox unexpectedly.
     #[serde(default)]
     pub notifications_sync: bool,
+    /// When true, the auto-updater checks the beta (pre-release) channel instead
+    /// of stable. Off by default — beta builds ship early, possibly-rough fixes.
+    #[serde(default)]
+    pub beta_updates: bool,
 }
 
 fn default_poll_secs() -> u64 {

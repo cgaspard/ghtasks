@@ -32,6 +32,7 @@
     window_size: "large",
     row_density: "default",
     notifications_sync: false,
+    beta_updates: false,
   });
   let repos: Repo[] = $state([]);
   let saved = $state(false);
@@ -227,6 +228,20 @@
           Projects/Issues item also marks its GitHub notification read. The
           Inbox tab's own "Mark read" always syncs, regardless of this
           setting.
+        </div>
+
+        <label class="inline">
+          <input
+            type="checkbox"
+            bind:checked={settings.beta_updates}
+            onchange={save}
+          />
+          Receive beta updates
+        </label>
+        <div class="hint">
+          Auto-update from the beta channel — new features and fixes land here
+          first, before the stable release. Betas can be rougher. Turn off to
+          return to stable on the next release.
         </div>
 
         {#if saved}

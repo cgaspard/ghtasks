@@ -3,6 +3,7 @@ name: Release
 on:
   push:
     tags:
+      # Stable: v1.2.3   Beta: v1.2.3-beta.1 (any pre-release suffix works).
       - "v*.*.*"
   workflow_dispatch:
 
@@ -12,9 +13,12 @@ permissions:
 jobs:
   # Fail the whole release fast if there are no per-version release notes.
   # Avoids burning ~30 min of macOS/Windows/Linux build time only to
-  # discover we forgot the markdown file for the tag.
+  # discover we forgot the markdown file for the tag. Also classifies the tag
+  # as beta (pre-release) vs stable and exposes it to later jobs.
   preflight:
     runs-on: ubuntu-latest
+    outputs:
+      is_beta: ${{ steps.classify.outputs.is_beta }}
     steps:
       - uses: actions/checkout@v4
       - name: Require release_notes/<tag>.md
@@ -30,6 +34,18 @@ jobs:
             exit 1
           fi
           echo "Release notes present: $NOTES_FILE"
+      - name: Classify channel (beta vs stable)
+        id: classify
+        shell: bash
+        run: |
+          # A hyphen in the tag (e.g. v0.6.0-beta.1) marks a pre-release/beta.
+          if [[ "${{ github.ref_name }}" == *-* ]]; then
+            echo "is_beta=true" >> "$GITHUB_OUTPUT"
+            echo "Channel: BETA (pre-release)"
+          else
+            echo "is_beta=false" >> "$GITHUB_OUTPUT"
+            echo "Channel: STABLE"
+          fi
 
   build:
     needs: preflight
@@ -132,11 +148,51 @@ jobs:
           # certificate secret is present; otherwise the macOS build is
           # unsigned.
         with:
-          # Create a draft release on tag push; we publish manually after we
-          # verify the artifacts look right.
+          # Both channels auto-publish (no manual draft step). Beta tags publish
+          # as GitHub *pre-releases*, which `/releases/latest` excludes — so
+          # stable users' auto-updater never sees them.
           tagName: ${{ github.ref_name }}
           releaseName: "GH Tasks ${{ github.ref_name }}"
           releaseBody: ${{ env.RELEASE_BODY }}
-          releaseDraft: true
-          prerelease: false
+          releaseDraft: false
+          prerelease: ${{ needs.preflight.outputs.is_beta == 'true' }}
           args: ${{ matrix.args }}
+
+  # Point the beta channel's stable endpoint at the newest beta build.
+  #
+  # The app's beta updater reads:
+  #   github.com/cgaspard/ghtasks/releases/download/beta/latest-beta.json
+  # `beta` is a permanent pre-release whose only job is to host that manifest.
+  # After a beta version's per-platform builds finish (they attach `latest.json`
+  # + bundle assets to the vX.Y.Z-beta.N release), we copy that manifest here as
+  # `latest-beta.json`. Its bundle URLs already point at the versioned release's
+  # real assets, so nothing else needs moving.
+  refresh-beta-channel:
+    needs: [preflight, build]
+    if: needs.preflight.outputs.is_beta == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Copy latest.json onto the permanent `beta` release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Pull the manifest the build just attached to the beta version's release.
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern "latest.json" --output latest-beta.json
+          echo "Fetched manifest for $TAG:"
+          grep -m1 '"version"' latest-beta.json || true
+
+          # Ensure the permanent `beta` release exists (pre-release, so it never
+          # becomes /releases/latest). Create it once; reuse it thereafter.
+          if ! gh release view beta --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create beta --repo "$GITHUB_REPOSITORY" \
+              --prerelease \
+              --title "Beta channel" \
+              --notes "Rolling pointer to the newest beta build. Enable *Receive beta updates* in GH Tasks → Settings to track this channel. Do not download from here directly."
+          fi
+
+          # Overwrite the manifest (--clobber replaces the existing asset).
+          gh release upload beta latest-beta.json --repo "$GITHUB_REPOSITORY" --clobber
+          echo "Beta channel now points at $TAG."

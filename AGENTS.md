@@ -177,12 +177,34 @@ Every tag **must** have a matching `release_notes/<tag>.md` file, or the build f
    git tag vX.Y.Z
    git push origin main --tags
    ```
-6. **Watch the workflow.** `gh run watch` or GitHub Actions UI. On success you'll have a draft release with:
+6. **Watch the workflow.** `gh run watch` or GitHub Actions UI. On success the release is **auto-published** (no draft step) with:
    - `GH.Tasks_universal.dmg` (signed + notarized)
    - `GH.Tasks_x64-setup.exe`, `GH.Tasks_x64_en-US.msi`
    - `GH.Tasks_amd64.AppImage`, `GH.Tasks_amd64.deb`, `GH.Tasks-<v>-1.x86_64.rpm`
-7. **Spot-check the artifacts.** Download the DMG and install on a fresh machine or VM; verify no Gatekeeper warning, sign-in works, projects load.
-8. **Publish the draft** via `gh release edit vX.Y.Z --repo cgaspard/ghtasks --draft=false` or the web UI. Drafts don't notify watchers; publishing does.
+   - `latest.json` (the auto-updater manifest)
+7. **Spot-check the artifacts.** Download the DMG, install, verify no Gatekeeper warning, sign-in works, projects load. Since stable auto-publishes, watchers are notified immediately — if you want a pre-flight check first, ship a **beta** (below) and dogfood it before the stable tag.
+
+### Release channels: stable vs beta
+
+The app has an in-app **beta channel** (Settings → General → *Receive beta updates*). The updater picks its endpoint from the `beta_updates` setting ([commands.rs](src-tauri/src/commands.rs) `channel_updater`):
+
+- **stable** → `releases/latest/download/latest.json` (GitHub's `/latest/` excludes pre-releases)
+- **beta** → `releases/download/beta/latest-beta.json` (a permanent pre-release tagged `beta` whose manifest CI refreshes)
+
+**Cutting a beta:** tag it with a pre-release suffix — `vX.Y.Z-beta.N` (the hyphen is what flags it). Same rules otherwise: it needs `release_notes/vX.Y.Z-beta.N.md`. CI then:
+1. Builds + **auto-publishes it as a GitHub pre-release** (stable users' updater never sees it).
+2. Runs `refresh-beta-channel`, copying that build's `latest.json` onto the permanent `beta` release as `latest-beta.json`. Beta users auto-update to it within a poll cycle.
+
+Beta users are promoted to the next **stable** automatically (a plain `vX.Y.Z` is a higher semver than `vX.Y.Z-beta.N`), so nobody gets stranded on the beta track.
+
+```bash
+# Example: ship a beta, dogfood, then promote to stable
+git tag v0.6.0-beta.1 && git push origin main --tags   # -> pre-release + beta channel
+# ...verify on a beta-channel install...
+git tag v0.6.0        && git push origin main --tags   # -> stable, promotes beta users
+```
+
+Don't delete the permanent `beta` release or retag `beta` by hand — CI owns it. It's a pre-release on purpose so it never becomes `/releases/latest`.
 
 ### If something goes wrong
 
