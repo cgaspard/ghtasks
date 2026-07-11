@@ -1668,7 +1668,7 @@ dependencies = [
 
 [[package]]
 name = "ghtasks"
-version = "0.5.3-beta.1"
+version = "0.5.3-1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",

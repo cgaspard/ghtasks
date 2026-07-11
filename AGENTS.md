@@ -191,21 +191,25 @@ The app has an in-app **beta channel** (Settings → General → *Receive beta u
 - **stable** → `releases/latest/download/latest.json` (GitHub's `/latest/` excludes pre-releases)
 - **beta** → `releases/download/beta/latest-beta.json` (a permanent pre-release tagged `beta` whose manifest CI refreshes)
 
-**Cutting a beta:** tag it with a pre-release suffix — `vX.Y.Z-beta.N` (the hyphen is what flags it). Same rules otherwise: it needs `release_notes/vX.Y.Z-beta.N.md`. CI then:
+**Cutting a beta:** tag it with a **numeric** pre-release suffix — `vX.Y.Z-N` (e.g. `v0.6.0-1`, `v0.6.0-2`). The hyphen flags it as a pre-release; the number increments per beta.
+
+> ⚠️ **The pre-release identifier MUST be numeric** (`-1`, `-2`), NOT `-beta.1`. The Windows **MSI** target rejects non-numeric pre-release identifiers (`optional pre-release identifier ... must be numeric-only`), which fails the whole build. `v0.6.0-1` is valid semver, MSI-safe, and still ranks below `v0.6.0`. This bit us on the very first beta (`v0.5.3-beta.1`).
+
+Same rules otherwise: it needs `release_notes/vX.Y.Z-N.md`. CI then:
 1. Builds + **auto-publishes it as a GitHub pre-release** (stable users' updater never sees it — `/releases/latest` excludes pre-releases).
 2. Runs `refresh-beta-channel`, copying that build's `latest.json` onto the permanent `beta` release as `latest-beta.json`. Beta users auto-update to it within a poll cycle.
 
 **Promoting a beta to production:** there is no "convert" step — you cut a normal stable tag with the release version:
 
 ```bash
-git tag v0.6.0-beta.1 && git push origin main --tags   # dogfood on the beta channel
-git tag v0.6.0-beta.2 && git push origin main --tags   # ...iterate...
-git tag v0.6.0        && git push origin main --tags   # promote to production
+git tag v0.6.0-1 && git push origin main --tags   # dogfood on the beta channel
+git tag v0.6.0-2 && git push origin main --tags   # ...iterate...
+git tag v0.6.0   && git push origin main --tags   # promote to production
 ```
 
 The stable tag converges *both* audiences onto the production build:
 - **Stable users** — `/releases/latest` flips to `v0.6.0`; they update on their next poll.
-- **Beta users** — `refresh-beta-channel` also runs for stable tags, so it repoints `latest-beta.json` at `v0.6.0`. Beta users see it on *their* endpoint and update immediately — no one lingers on `v0.6.0-beta.2`. (This is belt-and-suspenders on top of semver, which already ranks `0.6.0 > 0.6.0-beta.2`.)
+- **Beta users** — `refresh-beta-channel` also runs for stable tags, so it repoints `latest-beta.json` at `v0.6.0`. Beta users see it on *their* endpoint and update immediately — no one lingers on `v0.6.0-2`. (This is belt-and-suspenders on top of semver, which already ranks `0.6.0 > 0.6.0-2`.)
 
 The updater only ever moves *forward* (`release.version > current_version`), so refreshing the beta manifest to a stable build never downgrades anyone.
 
