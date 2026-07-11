@@ -192,17 +192,22 @@ The app has an in-app **beta channel** (Settings → General → *Receive beta u
 - **beta** → `releases/download/beta/latest-beta.json` (a permanent pre-release tagged `beta` whose manifest CI refreshes)
 
 **Cutting a beta:** tag it with a pre-release suffix — `vX.Y.Z-beta.N` (the hyphen is what flags it). Same rules otherwise: it needs `release_notes/vX.Y.Z-beta.N.md`. CI then:
-1. Builds + **auto-publishes it as a GitHub pre-release** (stable users' updater never sees it).
+1. Builds + **auto-publishes it as a GitHub pre-release** (stable users' updater never sees it — `/releases/latest` excludes pre-releases).
 2. Runs `refresh-beta-channel`, copying that build's `latest.json` onto the permanent `beta` release as `latest-beta.json`. Beta users auto-update to it within a poll cycle.
 
-Beta users are promoted to the next **stable** automatically (a plain `vX.Y.Z` is a higher semver than `vX.Y.Z-beta.N`), so nobody gets stranded on the beta track.
+**Promoting a beta to production:** there is no "convert" step — you cut a normal stable tag with the release version:
 
 ```bash
-# Example: ship a beta, dogfood, then promote to stable
-git tag v0.6.0-beta.1 && git push origin main --tags   # -> pre-release + beta channel
-# ...verify on a beta-channel install...
-git tag v0.6.0        && git push origin main --tags   # -> stable, promotes beta users
+git tag v0.6.0-beta.1 && git push origin main --tags   # dogfood on the beta channel
+git tag v0.6.0-beta.2 && git push origin main --tags   # ...iterate...
+git tag v0.6.0        && git push origin main --tags   # promote to production
 ```
+
+The stable tag converges *both* audiences onto the production build:
+- **Stable users** — `/releases/latest` flips to `v0.6.0`; they update on their next poll.
+- **Beta users** — `refresh-beta-channel` also runs for stable tags, so it repoints `latest-beta.json` at `v0.6.0`. Beta users see it on *their* endpoint and update immediately — no one lingers on `v0.6.0-beta.2`. (This is belt-and-suspenders on top of semver, which already ranks `0.6.0 > 0.6.0-beta.2`.)
+
+The updater only ever moves *forward* (`release.version > current_version`), so refreshing the beta manifest to a stable build never downgrades anyone.
 
 Don't delete the permanent `beta` release or retag `beta` by hand — CI owns it. It's a pre-release on purpose so it never becomes `/releases/latest`.
 

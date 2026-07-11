@@ -158,18 +158,22 @@ jobs:
           prerelease: ${{ needs.preflight.outputs.is_beta == 'true' }}
           args: ${{ matrix.args }}
 
-  # Point the beta channel's stable endpoint at the newest beta build.
+  # Point the beta channel's endpoint at this build's manifest.
   #
   # The app's beta updater reads:
   #   github.com/cgaspard/ghtasks/releases/download/beta/latest-beta.json
   # `beta` is a permanent pre-release whose only job is to host that manifest.
-  # After a beta version's per-platform builds finish (they attach `latest.json`
-  # + bundle assets to the vX.Y.Z-beta.N release), we copy that manifest here as
-  # `latest-beta.json`. Its bundle URLs already point at the versioned release's
-  # real assets, so nothing else needs moving.
+  # A release's per-platform builds attach `latest.json` + bundle assets to the
+  # vX.Y.Z(-beta.N) release; we copy that manifest here as `latest-beta.json`.
+  # Its bundle URLs already point at the versioned release's real assets.
+  #
+  # Runs for BOTH channels on purpose:
+  #   - beta tag   -> beta users get the new beta.
+  #   - stable tag -> beta users CONVERGE onto the stable build (semver:
+  #     0.6.0 > 0.6.0-beta.2), so no one is stranded on an old beta after a
+  #     promotion. Stable users are unaffected (they read /releases/latest).
   refresh-beta-channel:
     needs: [preflight, build]
-    if: needs.preflight.outputs.is_beta == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Copy latest.json onto the permanent `beta` release
@@ -178,7 +182,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          # Pull the manifest the build just attached to the beta version's release.
+          # Pull the manifest the build just attached to this version's release.
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
             --pattern "latest.json" --output latest-beta.json
           echo "Fetched manifest for $TAG:"
@@ -190,7 +194,7 @@ jobs:
             gh release create beta --repo "$GITHUB_REPOSITORY" \
               --prerelease \
               --title "Beta channel" \
-              --notes "Rolling pointer to the newest beta build. Enable *Receive beta updates* in GH Tasks → Settings to track this channel. Do not download from here directly."
+              --notes "Rolling pointer to the newest beta (or just-promoted stable) build. Enable *Receive beta updates* in GH Tasks → Settings to track this channel. Do not download from here directly."
           fi
 
           # Overwrite the manifest (--clobber replaces the existing asset).
