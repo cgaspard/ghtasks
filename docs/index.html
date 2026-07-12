@@ -3,37 +3,62 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>GitHub Tasks — Your GitHub issues, one keystroke away</title>
-<meta name="description" content="A fast, keyboard-friendly menu-bar app that turns GitHub Issues, Projects, and notifications into a single task list. macOS, Windows, and Linux." />
-<meta property="og:title" content="GitHub Tasks — Your GitHub issues, one keystroke away" />
-<meta property="og:description" content="Issues, Projects, and your notifications inbox — in the menu bar, one keystroke away." />
-<meta property="og:type" content="website" />
-<meta property="og:url" content="https://ghtasks.com/" />
-<meta property="og:image" content="https://ghtasks.com/marketing/framed/projects.png" />
+<title>GitHub Tasks — Your GitHub issues, projects & notifications in the menu bar</title>
+<meta name="description" content="A fast, free menu-bar app that puts your GitHub Issues, Projects boards, and notifications in one keyboard-friendly list. macOS, Windows, and Linux — signed, notarized, open source." />
+<meta name="theme-color" content="#0f1116" />
 <link rel="canonical" href="https://ghtasks.com/" />
 <link rel="icon" href="marketing/icons/favicon.png" />
+<link rel="apple-touch-icon" sizes="180x180" href="marketing/icons/apple-touch-icon.png" />
+
+<!-- Open Graph / social share -->
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="GitHub Tasks" />
+<meta property="og:url" content="https://ghtasks.com/" />
+<meta property="og:title" content="GitHub Tasks — your GitHub work, one click away" />
+<meta property="og:description" content="Issues, Projects boards, and notifications in one fast menu-bar app. macOS, Windows, Linux. Free & open source." />
+<meta property="og:image" content="https://ghtasks.com/marketing/og-card.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="GitHub Tasks — a menu-bar app showing a GitHub Projects board" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="GitHub Tasks — your GitHub work, one click away" />
+<meta name="twitter:description" content="Issues, Projects boards, and notifications in one fast menu-bar app. Free & open source." />
+<meta name="twitter:image" content="https://ghtasks.com/marketing/og-card.png" />
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "GitHub Tasks",
+  "operatingSystem": "macOS, Windows, Linux",
+  "applicationCategory": "DeveloperApplication",
+  "description": "A fast menu-bar app that puts your GitHub Issues, Projects boards, and notifications in one keyboard-friendly list.",
+  "url": "https://ghtasks.com/",
+  "downloadUrl": "https://github.com/cgaspard/ghtasks/releases/latest",
+  "softwareVersion": "0.5.4",
+  "license": "https://github.com/cgaspard/ghtasks",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
 <style>
   :root {
-    /* Lifted directly from the app's own theme (src/app.css) so the page
-       reads as the product's surface, not a generic dark landing template. */
+    /* Lifted from the app's own theme (src/app.css) so the page reads as the
+       product's surface, not a generic dark landing template. */
     --bg: #0f1116;
     --bg-elev: #191d26;
     --bg-hover: #222735;
     --border: #313846;
     --text: #f2f3f6;
-    /* Readable body copy — brighter than the app's dim tone so paragraphs on a
-       dark ground don't read as muted/inactive (10:1+ contrast on both grounds). */
     --text-body: #c4cbd6;
-    /* Reserved for small meta labels only, not running text. */
     --text-dim: #aab2be;
     --accent: #5b96ff;
     --accent-dim: #2b4a84;
-    /* The app's status vocabulary — used as small, meaningful accents. */
     --open: #3fb950;
     --merged: #a371f7;
     --progress: #d29922;
     --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Helvetica Neue", Arial, sans-serif;
+    --maxw: 1120px;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html { scroll-behavior: smooth; }
@@ -53,7 +78,7 @@
   ::selection { background: var(--accent-dim); color: #fff; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
 
   /* ---- top bar ---- */
   header {
@@ -62,8 +87,8 @@
     background: rgba(15, 17, 22, 0.72);
     border-bottom: 1px solid var(--border);
   }
-  .nav { display: flex; align-items: center; gap: 12px; height: 58px; }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: -0.01em; }
+  .nav { display: flex; align-items: center; gap: 12px; min-height: 58px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: -0.01em; white-space: nowrap; }
   .brand img { width: 26px; height: 26px; border-radius: 7px; }
   .nav .spacer { flex: 1; }
   .nav a.ghost { color: var(--text-dim); font-size: 14px; }
@@ -73,21 +98,23 @@
     background: var(--accent); color: #fff; font-weight: 600; font-size: 14px;
     padding: 9px 16px; border-radius: 999px; border: 1px solid transparent;
     transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+    white-space: nowrap;
   }
-  .btn:hover { text-decoration: none; background: #5f98ff; transform: translateY(-1px);
-    box-shadow: 0 8px 24px rgba(79, 140, 255, 0.3); }
+  .btn:hover { text-decoration: none; background: #6ea3ff; transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(91, 150, 255, 0.3); }
   .btn.secondary { background: var(--bg-elev); color: var(--text); border-color: var(--border); }
   .btn.secondary:hover { background: var(--bg-hover); box-shadow: none; }
+  .btn.lg { font-size: 15px; padding: 12px 22px; }
 
   /* ---- hero ---- */
   .hero {
     position: relative;
-    padding: 84px 0 40px;
+    padding: 72px 0 48px;
     background:
-      radial-gradient(1100px 520px at 22% -10%, rgba(79,140,255,0.16), transparent 60%),
+      radial-gradient(1100px 520px at 22% -10%, rgba(91,150,255,0.16), transparent 60%),
       radial-gradient(820px 440px at 112% 8%, rgba(163,113,247,0.10), transparent 55%);
   }
-  .hero-grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: 44px; align-items: center; }
+  .hero-grid { display: grid; grid-template-columns: 1fr 1.15fr; gap: 40px; align-items: center; }
   .eyebrow {
     display: inline-flex; align-items: center; gap: 8px;
     font-family: var(--mono); font-size: 12px; color: var(--text-dim);
@@ -96,59 +123,67 @@
   }
   .eyebrow .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--open); box-shadow: 0 0 8px var(--open); }
   h1 {
-    font-size: clamp(34px, 5.2vw, 56px);
+    font-size: clamp(34px, 5vw, 54px);
     line-height: 1.05; letter-spacing: -0.03em; font-weight: 720;
     text-wrap: balance; margin-bottom: 20px;
   }
   h1 .accent { color: var(--accent); }
-  .lede { font-size: clamp(17px, 1.9vw, 20px); color: var(--text-body); max-width: 30em; margin-bottom: 30px; }
+  .lede { font-size: clamp(17px, 1.9vw, 20px); color: var(--text-body); max-width: 32em; margin-bottom: 30px; }
   .cta-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-  .cta-note { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
-  .cta-note b { color: var(--text); font-weight: 600; }
+  .cta-sub { font-size: 13px; color: var(--text-dim); margin-top: 14px; }
+  .cta-sub a { color: var(--text-body); }
 
   .hero-shot { position: relative; }
   .hero-shot img {
-    border-radius: 14px;
-    box-shadow: 0 40px 90px rgba(0,0,0,0.55), 0 8px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05);
+    border-radius: 14px; width: 100%;
+    box-shadow: 0 40px 90px rgba(0,0,0,0.55), 0 8px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06);
   }
 
-  /* ---- platform strip ---- */
-  /* Trust pills under the hero CTAs — readable filled chips, not dim mono text. */
-  .trust { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 34px; }
+  /* trust pills — benefit-framed */
+  .trust { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 32px; }
   .trust .pill {
     font-size: 13px; color: var(--text-body); background: var(--bg-elev);
     border: 1px solid var(--border); border-radius: 999px; padding: 6px 13px;
   }
+  .trust .pill b { color: var(--text); font-weight: 600; }
 
   /* ---- section scaffold ---- */
-  section { padding: 72px 0; }
+  section { padding: 68px 0; }
   .kicker {
     font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
     color: #7fb0ff; display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px;
   }
   .kicker .bar { width: 22px; height: 2px; border-radius: 2px; background: var(--accent); }
   h2 { font-size: clamp(26px, 3.4vw, 36px); letter-spacing: -0.02em; line-height: 1.12; text-wrap: balance; }
-  .section-intro { color: var(--text-body); max-width: 34em; margin-top: 12px; font-size: 17px; }
+  .section-intro { color: var(--text-body); max-width: 36em; margin-top: 12px; font-size: 17px; }
 
-  /* feature rows: alternating text / framed shot.
-     Each row sits on a faintly elevated, bordered panel so the framed shots
-     don't dissolve into the page's near-black (the "everything's murky
-     dark-on-dark" problem). */
+  /* ---- why-not-github contrast strip ---- */
+  .why { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 36px; }
+  .why .col {
+    border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px;
+    background: var(--bg-elev);
+  }
+  .why .col h3 { font-size: 14px; letter-spacing: 0.02em; text-transform: uppercase; margin-bottom: 14px; color: var(--text-dim); }
+  .why .col.you h3 { color: #7fb0ff; }
+  .why ul { list-style: none; display: flex; flex-direction: column; gap: 11px; }
+  .why li { display: flex; gap: 10px; font-size: 15px; color: var(--text-body); line-height: 1.4; }
+  .why li .mk { flex: 0 0 auto; width: 18px; text-align: center; }
+  .why .tab li .mk { color: #6b7280; }
+  .why .you li .mk { color: var(--open); font-weight: 700; }
+
+  /* feature rows on elevated panels */
+  .features { display: flex; flex-direction: column; gap: 24px; margin-top: 48px; }
   .feature {
-    display: grid; grid-template-columns: 1fr 1.15fr; gap: 48px; align-items: center;
+    display: grid; grid-template-columns: 1fr 1.15fr; gap: 44px; align-items: center;
     background: var(--bg-elev); border: 1px solid var(--border); border-radius: 16px;
     padding: 36px 40px;
   }
-  .feature + .feature { margin-top: 24px; }
   .feature.flip .copy { order: 2; }
   .feature.flip .art { order: 1; }
   .feature h3 { font-size: 23px; letter-spacing: -0.01em; margin-bottom: 12px; }
-  .feature p { color: var(--text-body); font-size: 16px; }
-  .feature .art img { border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.05); }
-  /* status-vocabulary chips reused from the app */
+  .feature p { color: var(--text-body); font-size: 16px; max-width: 34em; }
+  .feature .art img { border-radius: 12px; width: 100%; box-shadow: 0 24px 60px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.05); }
   .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
-  /* Filled pills (a tinted background, not just colored text on black) so they
-     read as solid at a glance — mirrors the app's real status pills. */
   .chip { font-family: var(--mono); font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; border: 1px solid transparent; }
   .chip.open { color: #7ee787; background: color-mix(in srgb, var(--open) 22%, transparent); border-color: color-mix(in srgb, var(--open) 45%, transparent); }
   .chip.merged { color: #d2b3ff; background: color-mix(in srgb, var(--merged) 24%, transparent); border-color: color-mix(in srgb, var(--merged) 50%, transparent); }
@@ -158,31 +193,29 @@
   .demo { text-align: center; background: var(--bg-elev); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
   .demo h2 { margin-bottom: 10px; }
   .demo p { color: var(--text-body); margin-bottom: 30px; font-size: 16px; }
-  .demo img { margin: 0 auto; border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,0.5); }
-
-  /* ---- keystroke motif band ---- */
-  .keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 10px; }
-  .keycard { border: 1px solid var(--border); background: var(--bg-elev); border-radius: 12px; padding: 22px; }
-  .keycard .kbd {
-    display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 13px;
-    background: var(--bg); border: 1px solid var(--border); border-bottom-width: 2px;
-    border-radius: 6px; padding: 3px 8px; color: var(--text); margin-bottom: 14px;
-  }
-  .keycard h4 { font-size: 16px; margin-bottom: 6px; letter-spacing: -0.01em; }
-  .keycard p { color: var(--text-body); font-size: 14.5px; }
+  .demo video { margin: 0 auto; border-radius: 12px; max-width: 460px; width: 100%; box-shadow: 0 24px 60px rgba(0,0,0,0.5); }
+  .demo .after { margin-top: 30px; }
 
   /* ---- download ---- */
   .download { text-align: center; }
   .download h2 { margin-bottom: 12px; }
-  .download p { color: var(--text-body); max-width: 34em; margin: 0 auto 28px; font-size: 16px; }
-  .dl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 720px; margin: 0 auto; text-align: left; }
+  .download p { color: var(--text-body); max-width: 36em; margin: 0 auto 10px; font-size: 16px; }
+  .rel-line { font-family: var(--mono); font-size: 13px; color: var(--text-dim); margin-bottom: 28px; }
+  .rel-line b { color: var(--open); }
+  .dl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 760px; margin: 0 auto; text-align: left; }
   .dl {
-    display: block; border: 1px solid var(--border); background: var(--bg-elev); border-radius: 12px;
-    padding: 18px; transition: border-color .12s ease, transform .12s ease;
+    display: flex; flex-direction: column; gap: 6px;
+    border: 1px solid var(--border); background: var(--bg-elev); border-radius: 12px;
+    padding: 18px; transition: border-color .12s ease, transform .12s ease, background .12s ease;
   }
-  .dl:hover { text-decoration: none; border-color: var(--accent-dim); transform: translateY(-2px); }
-  .dl .os { font-weight: 640; color: var(--text); margin-bottom: 4px; }
+  .dl:hover { text-decoration: none; border-color: var(--accent); transform: translateY(-2px); background: var(--bg-hover); }
+  .dl .os { font-weight: 640; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .dl .os .arrow { color: var(--accent); }
   .dl .files { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
+  .dl-alt { font-size: 13px; color: var(--text-dim); margin-top: 22px; }
+  .reassure { display: flex; gap: 10px 20px; flex-wrap: wrap; justify-content: center; margin-top: 26px; font-size: 13.5px; color: var(--text-body); }
+  .reassure span { display: inline-flex; align-items: center; gap: 7px; }
+  .reassure .ck { color: var(--open); }
 
   /* ---- footer ---- */
   footer { border-top: 1px solid var(--border); padding: 40px 0 56px; color: var(--text-dim); font-size: 13px; }
@@ -191,12 +224,19 @@
   .foot-brand { display: flex; align-items: center; gap: 9px; color: var(--text); font-weight: 600; }
   .foot-brand img { width: 22px; height: 22px; border-radius: 6px; }
 
-  @media (max-width: 860px) {
-    .hero-grid, .feature, .feature.flip { grid-template-columns: 1fr; gap: 32px; }
+  /* ---- responsive ---- */
+  @media (max-width: 1000px) {
+    .feature, .feature.flip { grid-template-columns: 1fr; gap: 28px; }
     .feature.flip .copy, .feature.flip .art { order: initial; }
-    .keys, .dl-grid { grid-template-columns: 1fr; }
-    .hero { padding-top: 56px; }
-    section { padding: 56px 0; }
+    .hero-grid { gap: 32px; }
+  }
+  @media (max-width: 720px) {
+    .nav a.ghost { display: none; }        /* redundant on a one-page scroll; GitHub is in the footer */
+    .hero-grid, .why { grid-template-columns: 1fr; }
+    .dl-grid { grid-template-columns: 1fr; }
+    .hero { padding-top: 48px; }
+    section { padding: 52px 0; }
+    .feature { padding: 26px 22px; }
   }
 </style>
 </head>
@@ -209,7 +249,7 @@
     <a class="ghost" href="#features">Features</a>
     <a class="ghost" href="#download">Download</a>
     <a class="ghost" href="https://github.com/cgaspard/ghtasks">GitHub</a>
-    <a class="btn" href="https://github.com/cgaspard/ghtasks/releases/latest">Download</a>
+    <a class="btn" href="#download">Download</a>
   </div>
 </header>
 
@@ -217,67 +257,119 @@
   <div class="wrap hero-grid">
     <div>
       <span class="eyebrow"><span class="dot"></span> menu-bar · macOS · Windows · Linux</span>
-      <h1>Your GitHub issues, <span class="accent">one keystroke away.</span></h1>
-      <p class="lede"><b style="color:var(--text)">GitHub Tasks</b> is a menu-bar app for macOS, Windows, and Linux that puts your GitHub Issues, Projects boards, and notifications inbox in one fast, compact list — so you can triage and update work without ever opening a browser tab.</p>
+      <h1>All your GitHub work, <span class="accent">one click from the menu bar.</span></h1>
+      <p class="lede"><b style="color:var(--text)">GitHub Tasks</b> pulls your Issues, Projects boards, and notifications into one fast, compact list that lives in your menu bar — so you can triage and update work without hunting through browser tabs.</p>
       <div class="cta-row">
-        <a class="btn" href="https://github.com/cgaspard/ghtasks/releases/latest">⬇︎ Download free</a>
-        <a class="btn secondary" href="#demo">Watch the demo</a>
+        <a class="btn lg" href="#download">⬇︎ Download free</a>
+        <a class="btn secondary lg" href="#demo">Watch the 15-second tour</a>
       </div>
+      <div class="cta-sub">Free &amp; <a href="https://github.com/cgaspard/ghtasks">open source</a> · no account, no server, no tracking.</div>
       <div class="trust">
-        <span class="pill">Signed &amp; notarized</span>
-        <span class="pill">GitHub device-flow sign-in</span>
-        <span class="pill">Token stored in your keychain</span>
+        <span class="pill">Sign in with GitHub — <b>no password</b></span>
+        <span class="pill"><b>Signed &amp; notarized</b> — no Gatekeeper warning</span>
+        <span class="pill">Token stays in your <b>OS keychain</b></span>
       </div>
     </div>
     <div class="hero-shot">
-      <img src="marketing/framed/projects.png" alt="GitHub Tasks showing a GitHub Projects board in the menu bar, with status pills, priorities, and linked pull requests" />
+      <picture>
+        <source srcset="marketing/framed/projects.webp" type="image/webp" />
+        <img src="marketing/framed/projects.png" width="1000" height="1222" alt="GitHub Tasks showing a GitHub Projects board in the menu bar — status pills, priorities, linked pull requests, and a color stripe per row" />
+      </picture>
     </div>
   </div>
 </div>
 
+<section>
+  <div class="wrap">
+    <span class="kicker"><span class="bar"></span> Why a menu-bar app</span>
+    <h2>You already have github.com. Why install this?</h2>
+    <p class="section-intro">Because the browser makes you go <em>to</em> your work. GitHub Tasks brings it to you — one tray click, always the same place, gone when you're done.</p>
+    <div class="why">
+      <div class="col tab">
+        <h3>github.com in a browser tab</h3>
+        <ul>
+          <li><span class="mk">—</span> One of thirty tabs you have to hunt for</li>
+          <li><span class="mk">—</span> Issues, your board, and notifications live on separate pages</li>
+          <li><span class="mk">—</span> Full page reload to filter or switch repos</li>
+          <li><span class="mk">—</span> Easy to miss a review request or @-mention</li>
+        </ul>
+      </div>
+      <div class="col you">
+        <h3>GitHub Tasks in your menu bar</h3>
+        <ul>
+          <li><span class="mk">✓</span> One tray click — same spot every time</li>
+          <li><span class="mk">✓</span> Issues, Projects, and notifications in one list</li>
+          <li><span class="mk">✓</span> Filters as you type; paints instantly from cache</li>
+          <li><span class="mk">✓</span> Desktop pings for mentions, reviews &amp; replies</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="features">
   <div class="wrap">
     <span class="kicker"><span class="bar"></span> What it does</span>
-    <h2>Everything you check GitHub for — in the menu bar.</h2>
-    <p class="section-intro">One list spans every repo and Projects v2 board you add. Filter by typing. Never reopen that tab again.</p>
+    <h2>Everything you check GitHub for — in one list.</h2>
+    <p class="section-intro">Add a source per repo or Projects board; its items flow into a single keyboard-navigable list that spans every repo you work in.</p>
 
-    <div style="height: 48px"></div>
-
-    <div class="feature">
-      <div class="copy">
-        <h3>One board, every repo</h3>
-        <p>Add a <b>Source</b> — a Projects v2 board or a <span style="font-family:var(--mono);font-size:13px">(repo, search query)</span> pair — and its items flow into one keyboard-navigable list. Status pills, priorities, labels, milestones, and a color stripe per row. Multi-select status filters, source filters, and any custom single-select field.</p>
-        <div class="chips">
-          <span class="chip progress">In Progress</span>
-          <span class="chip open">PR&nbsp;#501 open</span>
-          <span class="chip merged">PR&nbsp;#495 merged</span>
+    <div class="features">
+      <div class="feature">
+        <div class="copy">
+          <h3>One list, every repo</h3>
+          <p>Add a <b>Source</b> — a Projects v2 board or a <span style="font-family:var(--mono);font-size:13px">(repo, search query)</span> pair — and its items flow into one list. Status pills, priorities, labels, milestones, and a color stripe per row. Multi-select status filters, source filters, and any custom single-select field.</p>
+          <div class="chips">
+            <span class="chip progress">In Progress</span>
+            <span class="chip open">PR&nbsp;#501 open</span>
+            <span class="chip merged">PR&nbsp;#495 merged</span>
+          </div>
+        </div>
+        <div class="art">
+          <picture>
+            <source srcset="marketing/framed/projects-status-filter.webp" type="image/webp" />
+            <img src="marketing/framed/projects-status-filter.png" width="1000" height="1222" loading="lazy" decoding="async" alt="Multi-select status filtering on the Projects board" />
+          </picture>
         </div>
       </div>
-      <div class="art"><img src="marketing/framed/projects-status-filter.png" alt="Multi-select status filtering on the Projects board" /></div>
-    </div>
 
-    <div class="feature flip">
-      <div class="copy">
-        <h3>The notifications inbox that lives where you work</h3>
-        <p>A faithful mirror of <b>github.com/notifications</b> — review requests, mentions, replies, assignments, CI, subscriptions — read and unread, with infinite scroll and search. Filter by category with checkboxes, flip <b>Unread only</b> to cut to the chase, and mark read straight back to GitHub.</p>
+      <div class="feature flip">
+        <div class="copy">
+          <h3>The notifications inbox that lives where you work</h3>
+          <p>A faithful mirror of <b>github.com/notifications</b> — review requests, mentions, replies, assignments, CI, subscriptions — read and unread, with infinite scroll and search. Filter by category with checkboxes, flip <b>Unread only</b> to cut to the chase, and mark read straight back to GitHub.</p>
+        </div>
+        <div class="art">
+          <picture>
+            <source srcset="marketing/framed/inbox-filter.webp" type="image/webp" />
+            <img src="marketing/framed/inbox-filter.png" width="1000" height="1222" loading="lazy" decoding="async" alt="The Inbox with its multi-select category filter open — review requests, mentions, and CI activity" />
+          </picture>
+        </div>
       </div>
-      <div class="art"><img src="marketing/framed/inbox-filter.png" alt="The Inbox with its multi-select category filter open" /></div>
-    </div>
 
-    <div class="feature">
-      <div class="copy">
-        <h3>Search across every source</h3>
-        <p>The Issues tab runs your GitHub search queries across repos and drops the results into the same fast list — assigned to you, your review queue, whatever you define. Linked PRs and milestones fill in automatically.</p>
+      <div class="feature">
+        <div class="copy">
+          <h3>Search across every repo at once</h3>
+          <p>The Issues tab runs your GitHub search queries across all your repos and drops the results into the same fast list — assigned to you, your review queue, whatever you define. Linked PRs and milestones fill in automatically.</p>
+        </div>
+        <div class="art">
+          <picture>
+            <source srcset="marketing/framed/issues.webp" type="image/webp" />
+            <img src="marketing/framed/issues.png" width="1000" height="1222" loading="lazy" decoding="async" alt="The Issues tab aggregating results from two repositories, acme/webapp and acme/mobile" />
+          </picture>
+        </div>
       </div>
-      <div class="art"><img src="marketing/framed/issues.png" alt="The Issues tab aggregating repo search results" /></div>
-    </div>
 
-    <div class="feature flip">
-      <div class="copy">
-        <h3>Create without leaving</h3>
-        <p>Spin up a new issue — attach it to a project and set its status, pick the repo, labels, and issue type, assign it to yourself — from a modal that never leaves the menu bar. Then get back to work.</p>
+      <div class="feature flip">
+        <div class="copy">
+          <h3>File an issue without leaving the menu bar</h3>
+          <p>Spin up a new issue — attach it to a project and set its status, pick the repo, labels, and issue type, assign it to yourself — from a modal that never leaves the menu bar. Then get back to work.</p>
+        </div>
+        <div class="art">
+          <picture>
+            <source srcset="marketing/framed/new-issue.webp" type="image/webp" />
+            <img src="marketing/framed/new-issue.png" width="1000" height="1222" loading="lazy" decoding="async" alt="Create a new issue with optional project attach, status, labels, and type" />
+          </picture>
+        </div>
       </div>
-      <div class="art"><img src="marketing/framed/new-issue.png" alt="Create a new issue with optional project attach" /></div>
     </div>
   </div>
 </section>
@@ -287,32 +379,8 @@
     <span class="kicker" style="justify-content:center"><span class="bar"></span> 15-second tour</span>
     <h2>Projects → filters → Issues → Inbox.</h2>
     <p>The whole loop, without a single browser tab.</p>
-    <a href="marketing/video/demo.mp4"><img src="marketing/video/demo.gif" width="460" alt="GitHub Tasks demo — Projects board, status filters, Issues, and the notifications Inbox" /></a>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <span class="kicker"><span class="bar"></span> Fast &amp; low-friction</span>
-    <h2>Speed is the whole point.</h2>
-    <p class="section-intro">The window is small on purpose, fast on purpose, and closes the moment you're done. Open it, glance, act, and get back to work.</p>
-    <div class="keys">
-      <div class="keycard">
-        <span class="kbd">click tray</span>
-        <h4>Open where you are</h4>
-        <p>The window snaps open under the tray icon and paints instantly from disk cache while a fresh sync runs underneath.</p>
-      </div>
-      <div class="keycard">
-        <span class="kbd">type to filter</span>
-        <h4>Find it by typing</h4>
-        <p>Filter any list by title, label, or <span style="font-family:var(--mono)">#number</span> the moment you start typing — no submit, no reload.</p>
-      </div>
-      <div class="keycard">
-        <span class="kbd">⌘,</span>
-        <h4>Settings in a keystroke</h4>
-        <p>Sources, row density, default repo, launch-at-login — all a shortcut away, all persisted across relaunches.</p>
-      </div>
-    </div>
+    <video src="marketing/video/demo.mp4" poster="marketing/video/demo-poster.webp" autoplay muted loop playsinline width="460" aria-label="Screen recording of GitHub Tasks: browsing the Projects board, filtering by status, switching to Issues, and the notifications Inbox"></video>
+    <div class="after"><a class="btn lg" href="#download">⬇︎ Download free</a></div>
   </div>
 </section>
 
@@ -320,21 +388,29 @@
   <div class="wrap">
     <span class="kicker" style="justify-content:center"><span class="bar"></span> Free &amp; open source</span>
     <h2>Download GitHub Tasks</h2>
-    <p>Grab the latest signed build. Sign in once with GitHub's device flow — no password, no backend, token stored in your OS keychain.</p>
+    <p>Sign in once with GitHub's device flow — no password, no backend. The token is stored in your OS keychain and nothing leaves your machine.</p>
+    <p class="rel-line">Latest: <b>v0.5.4</b> · released Jul 2026 · <a href="https://github.com/cgaspard/ghtasks/releases">changelog</a></p>
     <div class="dl-grid">
-      <a class="dl" href="https://github.com/cgaspard/ghtasks/releases/latest">
-        <div class="os">macOS</div>
-        <div class="files">universal .dmg<br/>signed + notarized</div>
+      <a class="dl" href="https://github.com/cgaspard/ghtasks/releases/latest/download/GitHub.Tasks_0.5.4_universal.dmg">
+        <div class="os"><span class="arrow">⬇︎</span> macOS</div>
+        <div class="files">universal .dmg · signed + notarized</div>
       </a>
-      <a class="dl" href="https://github.com/cgaspard/ghtasks/releases/latest">
-        <div class="os">Windows</div>
-        <div class="files">.exe · .msi</div>
+      <a class="dl" href="https://github.com/cgaspard/ghtasks/releases/latest/download/GitHub.Tasks_0.5.4_x64-setup.exe">
+        <div class="os"><span class="arrow">⬇︎</span> Windows</div>
+        <div class="files">.exe installer (or .msi)</div>
       </a>
-      <a class="dl" href="https://github.com/cgaspard/ghtasks/releases/latest">
-        <div class="os">Linux</div>
+      <a class="dl" href="https://github.com/cgaspard/ghtasks/releases/latest/download/GitHub.Tasks_0.5.4_amd64.AppImage">
+        <div class="os"><span class="arrow">⬇︎</span> Linux</div>
         <div class="files">.AppImage · .deb · .rpm</div>
       </a>
     </div>
+    <div class="reassure">
+      <span><span class="ck">✓</span> Free forever</span>
+      <span><span class="ck">✓</span> Open source</span>
+      <span><span class="ck">✓</span> No account or sign-up</span>
+      <span><span class="ck">✓</span> No telemetry</span>
+    </div>
+    <p class="dl-alt">Need a different file? <a href="https://github.com/cgaspard/ghtasks/releases/latest">See all downloads &amp; checksums →</a></p>
   </div>
 </section>
 
@@ -343,7 +419,7 @@
     <span class="foot-brand"><img src="marketing/icons/icon.png" alt="" /> GitHub Tasks</span>
     <span class="spacer"></span>
     <a href="https://github.com/cgaspard/ghtasks">Source</a>
-    <a href="https://github.com/cgaspard/ghtasks/releases/latest">Releases</a>
+    <a href="https://github.com/cgaspard/ghtasks/releases">Releases</a>
     <a href="https://github.com/cgaspard/ghtasks/issues">Report an issue</a>
     <span style="color:var(--text-dim)">· Built with Tauri, Svelte &amp; Rust</span>
   </div>

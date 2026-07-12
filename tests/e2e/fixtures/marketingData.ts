@@ -328,6 +328,10 @@ export const HERO_PROJECT_PAGE: ProjectPageEvent = {
 };
 
 // ---- Issues tab (repo search results across two enabled repo sources) ------
+// Deliberately spans TWO repos (acme/webapp + acme/mobile) with distinct titles
+// from the Projects board, so marketing shots prove "spans every repo" and
+// don't blur together with the Projects screenshot.
+const REPO2 = "https://api.github.com/repos/acme/mobile";
 export const HERO_ASSIGNED_ISSUES: Issue[] = [
   heroIssue({
     number: 284,
@@ -352,6 +356,16 @@ export const HERO_ASSIGNED_ISSUES: Issue[] = [
     ],
   }),
   heroIssue({
+    number: 77,
+    title: "Push notifications drop on Android 14 cold start",
+    repository_url: REPO2,
+    html_url: "https://github.com/acme/mobile/issues/77",
+    labels: [
+      { name: "bug", color: "d73a4a" },
+      { name: "android", color: "3ddc84" },
+    ],
+  }),
+  heroIssue({
     number: 240,
     title: "Migrate search to the new index cluster",
     repository_url: REPO,
@@ -367,6 +381,13 @@ export const HERO_ASSIGNED_ISSUES: Issue[] = [
         repo: "acme/webapp",
       },
     ],
+  }),
+  heroIssue({
+    number: 52,
+    title: "Offline mode: queue mutations and replay on reconnect",
+    repository_url: REPO2,
+    html_url: "https://github.com/acme/mobile/issues/52",
+    labels: [{ name: "feature", color: "a2eeef" }],
   }),
   heroIssue({
     number: 215,

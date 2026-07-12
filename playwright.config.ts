@@ -12,9 +12,11 @@ export default defineConfig({
   // Pure-logic unit specs live under tests/unit and run via vitest, not here.
   testMatch: "**/*.spec.ts",
   // Marketing asset generators (screenshots / demo video) aren't tests — they
-  // write files under docs/marketing and are run on demand via `npm run capture`,
-  // not as part of the QA suite.
-  testIgnore: ["**/capture.spec.ts", "**/frame.spec.ts", "**/frame-video.spec.ts", "**/demo.spec.ts"],
+  // write files under docs/marketing and are run on demand via `npm run capture`
+  // (which sets CAPTURE=1 to include them), not as part of the QA suite.
+  testIgnore: process.env.CAPTURE
+    ? []
+    : ["**/capture.spec.ts", "**/frame.spec.ts", "**/frame-video.spec.ts", "**/demo.spec.ts"],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

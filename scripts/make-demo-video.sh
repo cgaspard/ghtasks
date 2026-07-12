@@ -16,14 +16,14 @@ command -v ffmpeg >/dev/null || { echo "ffmpeg not found on PATH"; exit 1; }
 
 echo "==> [1/4] Recording app walkthrough"
 rm -rf "$VID/raw" "$VID/framed" "$VID/demo-app.mp4"
-npx playwright test demo.spec.ts
+CAPTURE=1 npx playwright test demo.spec.ts
 
 RAW=$(ls "$VID"/raw/*.webm | head -1)
 echo "==> [2/4] Transcoding app-only clip"
 ffmpeg -y -i "$RAW" -movflags +faststart -pix_fmt yuv420p -crf 22 -an "$VID/demo-app.mp4"
 
 echo "==> [3/4] Framing the clip in window chrome"
-npx playwright test frame-video.spec.ts
+CAPTURE=1 npx playwright test frame-video.spec.ts
 FRAMED=$(ls "$VID"/framed/*.webm | head -1)
 
 echo "==> [4/4] Producing final mp4 + gif"

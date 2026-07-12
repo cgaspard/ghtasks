@@ -27,32 +27,33 @@ function framedHtml(dataUri: string, grad: [string, string], title: string): str
   * { margin: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; }
   .stage {
-    width: 1280px; padding: 96px 120px;
+    width: 1000px; padding: 48px 56px;
     background:
-      radial-gradient(1200px 600px at 30% -10%, ${grad[0]}, transparent 60%),
-      radial-gradient(900px 500px at 110% 120%, ${grad[0]}, transparent 55%),
+      radial-gradient(1100px 560px at 30% -12%, ${grad[0]}, transparent 60%),
+      radial-gradient(820px 460px at 112% 118%, ${grad[0]}, transparent 55%),
       linear-gradient(160deg, ${grad[1]}, #06080f);
     display: flex; align-items: center; justify-content: center;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
   .window {
-    border-radius: 14px; overflow: hidden;
-    box-shadow: 0 40px 90px rgba(0,0,0,0.55), 0 8px 24px rgba(0,0,0,0.4),
-                0 0 0 1px rgba(255,255,255,0.06);
+    border-radius: 16px; overflow: hidden;
+    box-shadow: 0 44px 100px rgba(0,0,0,0.6), 0 10px 28px rgba(0,0,0,0.45),
+                0 0 0 1px rgba(255,255,255,0.08);
     background: #0d1117;
   }
   .titlebar {
-    height: 34px; display: flex; align-items: center; gap: 8px;
-    padding: 0 14px; background: #161b22;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
+    height: 40px; display: flex; align-items: center; gap: 9px;
+    padding: 0 16px; background: #161b22;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
   }
-  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot { width: 13px; height: 13px; border-radius: 50%; }
   .r { background: #ff5f57; } .y { background: #febc2e; } .g { background: #28c840; }
   .tb-title {
-    flex: 1; text-align: center; color: #8b949e; font-size: 12px;
-    margin-right: 48px; /* balance the 3 dots on the left */
+    flex: 1; text-align: center; color: #9aa4b2; font-size: 13.5px; font-weight: 500;
+    margin-right: 55px; /* balance the 3 dots on the left */
   }
-  img { display: block; width: 460px; height: auto; }
+  /* App renders larger so its text is legible at the sizes shown on the site. */
+  img { display: block; width: 780px; height: auto; }
   </style></head><body>
   <div class="stage">
     <div class="window">
@@ -65,7 +66,7 @@ function framedHtml(dataUri: string, grad: [string, string], title: string): str
   </div></body></html>`;
 }
 
-test.use({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 });
+test.use({ viewport: { width: 1000, height: 1100 }, deviceScaleFactor: 2 });
 
 test("frame all shots", async ({ page }) => {
   for (const f of FRAMES) {
