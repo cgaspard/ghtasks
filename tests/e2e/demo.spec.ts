@@ -1,4 +1,4 @@
-// Records a scripted product demo of GH Tasks driving the real Svelte
+// Records a scripted product demo of GitHub Tasks driving the real Svelte
 // frontend with the hero dataset. NOT a test. Produces a .webm under
 // docs/marketing/video/raw/ which a post-step converts to mp4 + gif.
 //

@@ -1,4 +1,4 @@
-# Row design — GH Tasks list rows
+# Row design — GitHub Tasks list rows
 
 The list-row design (“G×F·4”) and its three density presets.
 

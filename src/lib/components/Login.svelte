@@ -84,7 +84,7 @@
 
 <div class="login" data-tauri-drag-region>
   <div class="icon">✓</div>
-  <h1>GH Tasks</h1>
+  <h1>GitHub Tasks</h1>
   <p class="muted">Sign in with GitHub to get started.</p>
 
   {#if !device}

@@ -92,7 +92,7 @@
 
   <div class="scroll">
     <section class="hero">
-      <div class="app-name">GH Tasks</div>
+      <div class="app-name">GitHub Tasks</div>
       <div class="version">v{$appVersion ?? "…"}</div>
       <p class="tag muted">
         A fast, keyboard-friendly GitHub Issues + Projects task list for
@@ -186,7 +186,7 @@
     <section class="card">
       <div class="card-title">How it works</div>
       <p class="muted small">
-        GH Tasks signs in via GitHub's device-code OAuth flow. Your token
+        GitHub Tasks signs in via GitHub's device-code OAuth flow. Your token
         lives in the OS keychain (<code>com.cgaspard.ghtasks</code>) and
         never leaves your machine except to reach
         <code>api.github.com</code>. Projects v2 boards sync via GraphQL;

@@ -1,6 +1,6 @@
 # Icon samples
 
-Three hand-authored SVG candidates for the GH Tasks app icon. Open each
+Three hand-authored SVG candidates for the GitHub Tasks app icon. Open each
 `.svg` file in a browser (or Finder's Quick Look with space bar) to
 preview at any size. They're 1024×1024 flat vector — will scale crisp
 down to 16×16 tray size and up to 1024 Dock/Finder icons.

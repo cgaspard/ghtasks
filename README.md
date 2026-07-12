@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="src-tauri/icons/128x128@2x.png" width="88" alt="GH Tasks icon" />
+<img src="src-tauri/icons/128x128@2x.png" width="88" alt="GitHub Tasks icon" />
 
-# GH Tasks
+# GitHub Tasks
 
 ### Your GitHub issues, one keystroke away.
 
@@ -14,15 +14,15 @@ A fast, keyboard-friendly menu-bar app that turns GitHub **Issues**, **Projects*
 
 <br />
 
-<img src="docs/marketing/framed/projects.png" width="720" alt="GH Tasks — the Projects board in the menu bar" />
+<img src="docs/marketing/framed/projects.png" width="720" alt="GitHub Tasks — the Projects board in the menu bar" />
 
 </div>
 
 <br />
 
-## Why GH Tasks
+## Why GitHub Tasks
 
-You live in the terminal and the editor. Your work lives in GitHub. Between them is a browser tab you keep reopening to check *what's assigned to me, what needs my review, who @-mentioned me.* GH Tasks collapses that loop into a menu-bar icon:
+You live in the terminal and the editor. Your work lives in GitHub. Between them is a browser tab you keep reopening to check *what's assigned to me, what needs my review, who @-mentioned me.* GitHub Tasks collapses that loop into a menu-bar icon:
 
 - **Instant.** Click the tray icon (or hit your shortcut) and a compact window snaps open right under it. Cold launch paints from disk cache in a blink; a fresh sync runs underneath.
 - **Unified.** One list spans every repo and Projects v2 board you add — personal todos, work tickets, and your review queue, side by side.
@@ -33,7 +33,7 @@ You live in the terminal and the editor. Your work lives in GitHub. Between them
 
 <div align="center">
 <a href="docs/marketing/video/demo.mp4">
-  <img src="docs/marketing/video/demo.gif" width="440" alt="GH Tasks demo — Projects, status filters, Issues, and the notifications Inbox" />
+  <img src="docs/marketing/video/demo.gif" width="440" alt="GitHub Tasks demo — Projects, status filters, Issues, and the notifications Inbox" />
 </a>
 
 <em>A 15-second tour — Projects → status filters → Issues → the notifications Inbox.<br/>(<a href="docs/marketing/video/demo.mp4">watch the crisper MP4 →</a>)</em>
@@ -81,9 +81,9 @@ Grab the latest signed build from the [**releases page**](https://github.com/cga
 
 | Platform | File |
 |---|---|
-| **macOS** (Apple Silicon + Intel) | `GH.Tasks_universal.dmg` — signed & notarized, no Gatekeeper prompt |
-| **Windows** | `GH.Tasks_x64-setup.exe` or `GH.Tasks_x64_en-US.msi` |
-| **Linux** | `GH.Tasks_amd64.AppImage`, `.deb`, or `.rpm` |
+| **macOS** (Apple Silicon + Intel) | `GitHub.Tasks_universal.dmg` — signed & notarized, no Gatekeeper prompt |
+| **Windows** | `GitHub.Tasks_x64-setup.exe` or `GitHub.Tasks_x64_en-US.msi` |
+| **Linux** | `GitHub.Tasks_amd64.AppImage`, `.deb`, or `.rpm` |
 
 Sign in once with GitHub's **device flow** — a code you paste at `github.com/login/device`. No client secret, no password, no backend server. Your token lives in the OS keychain.
 

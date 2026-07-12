@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * E2E config for GH Tasks. The app is a Tauri WebView app; for repeatable
+ * E2E config for GitHub Tasks. The app is a Tauri WebView app; for repeatable
  * headless QA we run the Svelte frontend in Chromium and mock the Tauri IPC
  * layer (see tests/e2e/fixtures/tauriMock.ts). No Rust, no GitHub auth.
  *

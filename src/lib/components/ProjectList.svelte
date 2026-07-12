@@ -557,7 +557,7 @@
       <div class="cta-icon" aria-hidden="true">📋</div>
       <div class="cta-title">Add your first Project</div>
       <div class="cta-body">
-        GH Tasks shows items from GitHub <strong>Projects v2</strong>
+        GitHub Tasks shows items from GitHub <strong>Projects v2</strong>
         boards — with their Status, assignees, labels, and inline status
         changes. Pick a board you already use (team roadmap, personal
         tracker, sprint board) and its items stream in.

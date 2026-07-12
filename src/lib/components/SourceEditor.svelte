@@ -289,7 +289,7 @@
               <br />• The OAuth app may need approval from your org admin at
               <code>github.com/organizations/&lt;org&gt;/settings/oauth_application_policy</code>.
               <br />• If SSO is enforced, authorize the token at
-              <code>github.com/settings/applications</code> → GH Tasks.
+              <code>github.com/settings/applications</code> → GitHub Tasks.
               <br />• Try signing out + back in (avatar menu → Sign out).
             </div>
           {/if}

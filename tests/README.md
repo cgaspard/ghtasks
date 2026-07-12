@@ -1,6 +1,6 @@
 # Tests
 
-Automated QA for GH Tasks. Two layers, one command.
+Automated QA for GitHub Tasks. Two layers, one command.
 
 ```bash
 npm test            # unit + e2e, the full suite
@@ -10,7 +10,7 @@ npm run test:e2e    # playwright — the app driven in a headless browser
 
 ## Why it's built this way
 
-GH Tasks is a **Tauri** app: the Svelte frontend reaches the Rust backend only
+GitHub Tasks is a **Tauri** app: the Svelte frontend reaches the Rust backend only
 through `invoke()` (see [`src/lib/api.ts`](../src/lib/api.ts)). A real Tauri
 WebView (WKWebView on macOS) can't be driven by Playwright, and we don't want
 tests to need GitHub auth or a network.

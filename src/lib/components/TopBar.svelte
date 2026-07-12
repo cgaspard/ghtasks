@@ -244,7 +244,7 @@
                   d="M8 0a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0V.75A.75.75 0 0 1 8 0Zm-4.41 3.24a.75.75 0 1 1 .944 1.166 5.5 5.5 0 1 0 6.932 0 .75.75 0 0 1 .944-1.166 7 7 0 1 1-8.82 0Z"
                 />
               </svg>
-              <span>Quit GH Tasks</span>
+              <span>Quit GitHub Tasks</span>
               <span class="menu-kbd">⌘Q</span>
             </button>
             <div class="menu-sep"></div>
@@ -252,7 +252,7 @@
               class="menu-version"
               onclick={openAbout}
               role="menuitem"
-              title="About GH Tasks"
+              title="About GitHub Tasks"
             >
               v{$appVersion ?? "…"}
             </button>

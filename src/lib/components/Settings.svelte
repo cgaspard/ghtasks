@@ -197,7 +197,7 @@
         {#if notificationsAllowed === false}
           <div class="notif-warning">
             <span>
-              Notifications are turned off for GH Tasks in System Settings —
+              Notifications are turned off for GitHub Tasks in System Settings —
               you won't get desktop alerts for new inbox items.
             </span>
             <button class="linklike" onclick={openNotificationSettings}>

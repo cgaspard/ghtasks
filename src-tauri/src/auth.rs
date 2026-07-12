@@ -7,7 +7,7 @@ const KEYRING_ACCOUNT: &str = "github-token";
 /// one-time migration so existing users don't have to re-authenticate.
 const LEGACY_KEYRING_SERVICE: &str = "dev.ghtasks.app";
 
-/// Default client id points to the public "GH Tasks" GitHub App / OAuth app.
+/// Default client id points to the public "GitHub Tasks" GitHub App / OAuth app.
 /// Override at build time with the `GHTASKS_CLIENT_ID` env var (read via
 /// `option_env!`), or at runtime with the `GHTASKS_CLIENT_ID` env var.
 pub fn client_id() -> String {

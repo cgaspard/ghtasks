@@ -152,7 +152,7 @@ jobs:
           # as GitHub *pre-releases*, which `/releases/latest` excludes — so
           # stable users' auto-updater never sees them.
           tagName: ${{ github.ref_name }}
-          releaseName: "GH Tasks ${{ github.ref_name }}"
+          releaseName: "GitHub Tasks ${{ github.ref_name }}"
           releaseBody: ${{ env.RELEASE_BODY }}
           releaseDraft: false
           prerelease: ${{ needs.preflight.outputs.is_beta == 'true' }}
@@ -194,7 +194,7 @@ jobs:
             gh release create beta --repo "$GITHUB_REPOSITORY" \
               --prerelease \
               --title "Beta channel" \
-              --notes "Rolling pointer to the newest beta (or just-promoted stable) build. Enable *Receive beta updates* in GH Tasks → Settings to track this channel. Do not download from here directly."
+              --notes "Rolling pointer to the newest beta (or just-promoted stable) build. Enable *Receive beta updates* in GitHub Tasks → Settings to track this channel. Do not download from here directly."
           fi
 
           # Overwrite the manifest (--clobber replaces the existing asset).

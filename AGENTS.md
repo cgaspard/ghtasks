@@ -4,7 +4,7 @@ Orientation for AI coding assistants working in this repo. Humans can read it to
 
 ## What this is
 
-**GH Tasks** is a cross-platform menu-bar app that turns GitHub Issues and Projects v2 boards into a fast, keyboard-friendly task list. It lives in the macOS menu bar / Windows & Linux tray and pops open a compact window anchored to the tray icon.
+**GitHub Tasks** is a cross-platform menu-bar app that turns GitHub Issues and Projects v2 boards into a fast, keyboard-friendly task list. It lives in the macOS menu bar / Windows & Linux tray and pops open a compact window anchored to the tray icon.
 
 - **Shell:** Tauri 2 (Rust backend + WebView frontend), menu-bar-only (no Dock icon on macOS)
 - **Frontend:** Svelte 5 (runes: `$state`, `$derived`, `$effect`) + TypeScript + Vite
@@ -178,9 +178,9 @@ Every tag **must** have a matching `release_notes/<tag>.md` file, or the build f
    git push origin main --tags
    ```
 6. **Watch the workflow.** `gh run watch` or GitHub Actions UI. On success the release is **auto-published** (no draft step) with:
-   - `GH.Tasks_universal.dmg` (signed + notarized)
-   - `GH.Tasks_x64-setup.exe`, `GH.Tasks_x64_en-US.msi`
-   - `GH.Tasks_amd64.AppImage`, `GH.Tasks_amd64.deb`, `GH.Tasks-<v>-1.x86_64.rpm`
+   - `GitHub.Tasks_universal.dmg` (signed + notarized)
+   - `GitHub.Tasks_x64-setup.exe`, `GitHub.Tasks_x64_en-US.msi`
+   - `GitHub.Tasks_amd64.AppImage`, `GitHub.Tasks_amd64.deb`, `GitHub.Tasks-<v>-1.x86_64.rpm`
    - `latest.json` (the auto-updater manifest)
 7. **Spot-check the artifacts.** Download the DMG, install, verify no Gatekeeper warning, sign-in works, projects load. Since stable auto-publishes, watchers are notified immediately — if you want a pre-flight check first, ship a **beta** (below) and dogfood it before the stable tag.
 

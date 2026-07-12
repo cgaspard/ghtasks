@@ -13,13 +13,13 @@ mkdirSync(OUT, { recursive: true });
 
 // Each shot -> a gradient backdrop pairing (brand blue / violet / green tints).
 const FRAMES: { name: string; grad: [string, string]; title: string }[] = [
-  { name: "projects", grad: ["#1b2a4a", "#0c1220"], title: "GH Tasks — Projects" },
-  { name: "issues", grad: ["#241b4a", "#0c1220"], title: "GH Tasks — Issues" },
-  { name: "inbox", grad: ["#0f3326", "#0c1220"], title: "GH Tasks — Inbox" },
-  { name: "inbox-filter", grad: ["#0f3326", "#0c1220"], title: "GH Tasks — Inbox" },
-  { name: "projects-status-filter", grad: ["#1b2a4a", "#0c1220"], title: "GH Tasks" },
-  { name: "new-issue", grad: ["#2a1b4a", "#0c1220"], title: "GH Tasks — New issue" },
-  { name: "settings", grad: ["#22304a", "#0c1220"], title: "GH Tasks — Settings" },
+  { name: "projects", grad: ["#1b2a4a", "#0c1220"], title: "GitHub Tasks — Projects" },
+  { name: "issues", grad: ["#241b4a", "#0c1220"], title: "GitHub Tasks — Issues" },
+  { name: "inbox", grad: ["#0f3326", "#0c1220"], title: "GitHub Tasks — Inbox" },
+  { name: "inbox-filter", grad: ["#0f3326", "#0c1220"], title: "GitHub Tasks — Inbox" },
+  { name: "projects-status-filter", grad: ["#1b2a4a", "#0c1220"], title: "GitHub Tasks" },
+  { name: "new-issue", grad: ["#2a1b4a", "#0c1220"], title: "GitHub Tasks — New issue" },
+  { name: "settings", grad: ["#22304a", "#0c1220"], title: "GitHub Tasks — Settings" },
 ];
 
 function framedHtml(dataUri: string, grad: [string, string], title: string): string {

@@ -46,7 +46,7 @@ test("frame the demo", async ({ browser }) => {
       <div class="window">
         <div class="titlebar">
           <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-          <span class="tb-title">GH Tasks</span>
+          <span class="tb-title">GitHub Tasks</span>
         </div>
         <video id="v" src="${dataUri}" muted autoplay playsinline></video>
       </div>

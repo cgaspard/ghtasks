@@ -21,7 +21,7 @@ pub fn setup(app: &App) -> tauri::Result<()> {
 
     let show_item = MenuItem::with_id(handle, "show", "Show", true, None::<&str>)?;
     let hide_item = MenuItem::with_id(handle, "hide", "Hide", true, None::<&str>)?;
-    let quit_item = MenuItem::with_id(handle, "quit", "Quit GH Tasks", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(handle, "quit", "Quit GitHub Tasks", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(handle)?;
 
     let menu = Menu::with_items(
@@ -33,7 +33,7 @@ pub fn setup(app: &App) -> tauri::Result<()> {
         .expect("embedded tray.png must decode");
 
     let _tray = TrayIconBuilder::with_id("main-tray")
-        .tooltip("GH Tasks")
+        .tooltip("GitHub Tasks")
         .icon(tray_icon)
         .icon_as_template(true)
         .menu(&menu)
@@ -207,12 +207,12 @@ pub fn set_update_state(
 
     let (bytes, tooltip) = if available {
         let tip = match version {
-            Some(v) if !v.is_empty() => format!("GH Tasks — update to v{v} available"),
-            _ => "GH Tasks — update available".to_string(),
+            Some(v) if !v.is_empty() => format!("GitHub Tasks — update to v{v} available"),
+            _ => "GitHub Tasks — update available".to_string(),
         };
         (TRAY_UPDATE_ICON_BYTES, tip)
     } else {
-        (TRAY_ICON_BYTES, "GH Tasks".to_string())
+        (TRAY_ICON_BYTES, "GitHub Tasks".to_string())
     };
 
     match Image::from_bytes(bytes) {
