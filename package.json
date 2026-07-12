@@ -1,7 +1,7 @@
 {
   "name": "ghtasks",
   "private": true,
-  "version": "0.5.3-1",
+  "version": "0.5.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
