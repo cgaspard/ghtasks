@@ -1,3 +1,4 @@
+import { type Page } from "@playwright/test";
 import { test, expect } from "./fixtures/app";
 
 // The linked-PR + milestone badges are rendered by LinkedBadges.svelte and
@@ -5,6 +6,16 @@ import { test, expect } from "./fixtures/app";
 //   - #92  → milestone "v1.0" + open PR #410
 //   - #922 → merged PR #411
 const SHOTS = "docs/screenshots";
+
+/** Refresh the tracked badge screenshots. Gated on CAPTURE (like the marketing
+ * generators in playwright.config.ts) so a plain `npm test` never rewrites
+ * committed binaries and leaves the working tree dirty. */
+async function capture(page: Page, name: string) {
+  if (!process.env.CAPTURE) return;
+  // Capture at the real popover width, not the default 1280px page.
+  await page.setViewportSize({ width: 400, height: 600 });
+  await page.screenshot({ path: `${SHOTS}/${name}.png` });
+}
 
 test.describe("linked PR + milestone badges", () => {
   test("Projects tab shows the linked-PR badge and milestone pill", async ({
@@ -32,9 +43,7 @@ test.describe("linked PR + milestone badges", () => {
       merged.locator('button.pr[title*="merged PR octocat/hello-world#411"]'),
     ).toBeVisible();
 
-    // Capture at the real popover width, not the default 1280px page.
-    await page.setViewportSize({ width: 400, height: 600 });
-    await page.screenshot({ path: `${SHOTS}/projects-linked-pr.png` });
+    await capture(page, "projects-linked-pr");
   });
 
   test("clicking the PR badge opens the PR url in the browser", async ({
@@ -79,8 +88,7 @@ test.describe("linked PR + milestone badges", () => {
       row.locator('button.pr[title*="open PR octocat/hello-world#410"]'),
     ).toBeVisible();
 
-    await page.setViewportSize({ width: 400, height: 600 });
-    await page.screenshot({ path: `${SHOTS}/issues-linked-pr.png` });
+    await capture(page, "issues-linked-pr");
   });
 
   test("an issue with no linked PR shows no PR badge", async ({ mountApp }) => {

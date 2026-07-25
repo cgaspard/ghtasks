@@ -22,6 +22,14 @@ async function toggleUnreadOnly(page: Page) {
   await page.locator(".filter .unread-toggle").click();
 }
 
+/** Close the Category popover. It only dismisses on outside click, and while
+ * open it covers the rows and the bulk bar. */
+async function closeCategoryMenu(page: Page) {
+  const menu = page.locator(".filter .menu");
+  if (await menu.isVisible()) await page.locator(".filter .trigger").click();
+  await expect(menu).toBeHidden();
+}
+
 test.describe("inbox", () => {
   test("tab badge shows the UNREAD count", async ({ mountApp, page }) => {
     await mountApp();
@@ -320,5 +328,191 @@ test.describe("inbox", () => {
       return log.filter((e) => e.cmd === "fetch_inbox").map((e) => e.args.page);
     });
     expect(fetchedPages.filter((p) => p === 1).length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// Bulk selection + mark-read. Every mark-read path is a REAL PATCH to GitHub
+// (the Inbox is a mirror, not a local dismissal list), so these tests assert on
+// what actually crosses the IPC boundary, not just on the rendered state.
+test.describe("inbox — bulk mark as read", () => {
+  /** node_ids sent to a given mark-read command, flattened across calls. */
+  async function markReadCalls(page: Page, cmd: string) {
+    return page.evaluate((c) => {
+      const log = (
+        window as unknown as {
+          __ipcLog: Array<{ cmd: string; args: Record<string, unknown> }>;
+        }
+      ).__ipcLog;
+      return log.filter((e) => e.cmd === c).map((e) => e.args);
+    }, cmd);
+  }
+
+  /** Click a row's checkbox by the row's visible title. */
+  async function selectRow(page: Page, title: string) {
+    const row = page.locator(".issue", { hasText: title }).first();
+    await row.hover();
+    await row.locator(".cb").click();
+  }
+
+  test("selecting a row reveals the bulk bar with a live count", async ({
+    mountApp,
+    page,
+  }) => {
+    await mountApp();
+    await page.getByRole("button", { name: /Inbox/ }).click();
+    await expect(page.locator(".bulk-bar .count")).toHaveCount(0);
+
+    await selectRow(page, "Fix the login flow");
+    await expect(page.locator(".bulk-bar .count")).toHaveText("1 selected");
+
+    await selectRow(page, "Rework the OAuth callback");
+    await expect(page.locator(".bulk-bar .count")).toHaveText("2 selected");
+
+    // Toggling the same row off decrements it again.
+    await selectRow(page, "Rework the OAuth callback");
+    await expect(page.locator(".bulk-bar .count")).toHaveText("1 selected");
+  });
+
+  test("Mark as read batches exactly the selected rows in one call", async ({
+    mountApp,
+    page,
+  }) => {
+    await mountApp();
+    await page.getByRole("button", { name: /Inbox/ }).click();
+    await selectRow(page, "Fix the login flow");
+    await selectRow(page, "Rework the OAuth callback");
+    await page.locator(".bulk-bar .mark-btn").click();
+
+    const calls = await markReadCalls(page, "mark_notifications_read");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].nodeIds).toEqual(["AWAIT_92", "NODE_1008"]);
+
+    // Selection clears and the rows drop their unread dot.
+    await expect(page.locator(".bulk-bar .count")).toHaveCount(0);
+    await expect(
+      page.locator(".issue", { hasText: "Fix the login flow" }).first(),
+    ).toHaveClass(/read/);
+  });
+
+  test("a selection filtered off-screen is never marked read", async ({
+    mountApp,
+    page,
+  }) => {
+    await mountApp();
+    await page.getByRole("button", { name: /Inbox/ }).click();
+    await selectRow(page, "Fix the login flow");
+    await selectRow(page, "Rework the OAuth callback");
+    await expect(page.locator(".bulk-bar .count")).toHaveText("2 selected");
+
+    // Narrow to a category that contains only the first of the two. The count
+    // must follow what's on screen — marking a thread the user can't see would
+    // silently mutate their real GitHub inbox.
+    await pickCategory(page, "Review requested");
+    await closeCategoryMenu(page);
+    await expect(page.locator(".bulk-bar .count")).toHaveText("1 selected");
+
+    await page.locator(".bulk-bar .mark-btn").click();
+    const calls = await markReadCalls(page, "mark_notifications_read");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].nodeIds).toEqual(["AWAIT_92"]);
+  });
+
+  test("a search that hides everything hides the bulk bar too", async ({
+    mountApp,
+    page,
+  }) => {
+    await mountApp();
+    await page.getByRole("button", { name: /Inbox/ }).click();
+    await selectRow(page, "Fix the login flow");
+    await expect(page.locator(".bulk-bar .count")).toHaveText("1 selected");
+
+    await page.locator(".search-input").fill("zzzznomatch");
+    await expect(page.locator(".issue")).toHaveCount(0);
+    await expect(page.locator(".bulk-bar .count")).toHaveCount(0);
+
+    // Clearing the search restores it — the selection was hidden, not dropped.
+    await page.locator(".search-clear").click();
+    await expect(page.locator(".bulk-bar .count")).toHaveText("1 selected");
+  });
+
+  test("unfiltered Mark all read takes two clicks and uses the single-request endpoint", async ({
+    mountApp,
+    page,
+  }) => {
+    await mountApp();
+    await page.getByRole("button", { name: /Inbox/ }).click();
+    const btn = page.locator(".bulk-bar .mark-all-btn");
+    await expect(btn).toHaveText("Mark all read");
+
+    // First click only arms it — nothing reaches GitHub yet.
+    await btn.click();
+    await expect(btn).toHaveText("Click again to confirm");
+    expect(await markReadCalls(page, "mark_all_notifications_read")).toHaveLength(0);
+
+    await btn.click();
+    const calls = await markReadCalls(page, "mark_all_notifications_read");
+    expect(calls).toHaveLength(1);
+    expect(typeof calls[0].lastReadAt).toBe("string");
+    // The whole-inbox endpoint replaces the per-thread fan-out entirely.
+    expect(await markReadCalls(page, "mark_notifications_read")).toHaveLength(0);
+    // Nothing unread is left, so the bar has no reason to stay.
+    await expect(page.locator(".bulk-bar")).toHaveCount(0);
+  });
+
+  test("under a filter, Mark all read is scoped and labelled by count", async ({
+    mountApp,
+    page,
+  }) => {
+    await mountApp();
+    await page.getByRole("button", { name: /Inbox/ }).click();
+    await pickCategory(page, "Review requested");
+    await closeCategoryMenu(page);
+
+    const btn = page.locator(".bulk-bar .mark-all-btn");
+    await expect(btn).toHaveText("Mark 1 read");
+    await btn.click();
+    await btn.click();
+
+    // Scoped to the filter, so it goes through the batch path, not PUT /notifications.
+    expect(await markReadCalls(page, "mark_all_notifications_read")).toHaveLength(0);
+    const calls = await markReadCalls(page, "mark_notifications_read");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].nodeIds).toEqual(["AWAIT_92"]);
+  });
+
+  test("a failed batch reverts the optimistic unread flip", async ({
+    mountApp,
+    page,
+  }) => {
+    await mountApp({ errors: { mark_notifications_read: "secondary rate limit" } });
+    await page.getByRole("button", { name: /Inbox/ }).click();
+    const row = page.locator(".issue", { hasText: "Fix the login flow" }).first();
+
+    await selectRow(page, "Fix the login flow");
+    await page.locator(".bulk-bar .mark-btn").click();
+
+    // The row must not keep claiming a read state GitHub rejected.
+    await expect(row).not.toHaveClass(/read/);
+  });
+
+  test("the row checkbox is a visible focus target for keyboard users", async ({
+    mountApp,
+    page,
+  }) => {
+    await mountApp();
+    await page.getByRole("button", { name: /Inbox/ }).click();
+    // Tab in for real: `:focus-visible` (correctly) ignores programmatic focus.
+    const cb = page.locator(".issue .cb").first();
+    await page.locator(".search-input").focus();
+    for (let i = 0; i < 6 && !(await cb.evaluate((el) => el === document.activeElement)); i++) {
+      await page.keyboard.press("Tab");
+    }
+    await expect(cb).toBeFocused();
+    // Focused-but-invisible would make it an unreachable tab stop on every row.
+    await expect(cb).toHaveCSS("opacity", "1");
+    expect(await cb.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe("solid");
+
+    await page.keyboard.press("Space");
+    await expect(page.locator(".bulk-bar .count")).toHaveText("1 selected");
   });
 });

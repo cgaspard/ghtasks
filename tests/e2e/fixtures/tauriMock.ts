@@ -50,6 +50,8 @@ export interface Scenario {
   inboxPages?: unknown[][];
   /** Per-command overrides: command name -> canned return value. */
   overrides?: Record<string, unknown>;
+  /** Per-command failures: command name -> message the invoke rejects with. */
+  errors?: Record<string, string>;
 }
 
 // This is the function that becomes the init script. Keep it ES5-ish and
@@ -116,6 +118,10 @@ function installTauriMock(): void {
   function handle(cmd: string, args: Record<string, unknown>): unknown {
     w.__ipcLog.push({ cmd, args });
     const s = scenario();
+    const errors = (s.errors as Record<string, string>) || {};
+    if (Object.prototype.hasOwnProperty.call(errors, cmd)) {
+      throw new Error(errors[cmd]);
+    }
     const overrides = (s.overrides as Record<string, unknown>) || {};
     if (Object.prototype.hasOwnProperty.call(overrides, cmd)) {
       return overrides[cmd];
@@ -181,6 +187,8 @@ function installTauriMock(): void {
       }
       case "mark_inbox_seen":
       case "mark_notification_read":
+      case "mark_notifications_read":
+      case "mark_all_notifications_read":
         return null;
       case "fetch_all_projects":
         return [];

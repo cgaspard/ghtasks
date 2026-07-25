@@ -278,6 +278,39 @@ pub async fn mark_thread_read(client: &reqwest::Client, token: &str, thread_id: 
     }
 }
 
+/// Mark the user's entire notification inbox read in one request
+/// (`PUT /notifications`). GitHub marks everything with an `updated_at` at or
+/// before `last_read_at`, which is the same semantic as the "Mark all as read"
+/// button on github.com — including threads the app never paged in. One call
+/// instead of N is the whole point: fanning out hundreds of PATCHes trips the
+/// secondary rate limit, which applies token-wide and would break the next
+/// refresh too.
+pub async fn mark_all_threads_read(
+    client: &reqwest::Client,
+    token: &str,
+    last_read_at: &str,
+) -> Result<()> {
+    let resp = crate::http_log::send_timed(
+        client,
+        "mark_all_threads_read",
+        client
+            .put(format!("{API_BASE}/notifications"))
+            .headers(auth_headers(token))
+            .json(&serde_json::json!({ "last_read_at": last_read_at, "read": true })),
+    )
+    .await?;
+    let status = resp.status();
+    // 202 Accepted (queued) or 205 Reset Content; 304 if nothing was unread.
+    if status.is_success() || status.as_u16() == 304 {
+        Ok(())
+    } else {
+        Err(Error::GitHub {
+            status: status.as_u16(),
+            message: resp.text().await.unwrap_or_default(),
+        })
+    }
+}
+
 /// One page of notifications, plus whether GitHub has more beyond it.
 pub struct NotificationPage {
     pub items: Vec<Notification>,

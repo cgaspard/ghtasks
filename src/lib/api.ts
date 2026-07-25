@@ -364,6 +364,10 @@ export const api = {
     invoke<void>("mark_inbox_seen", { nodeId, openedAt }),
   markNotificationRead: (nodeId: string) =>
     invoke<void>("mark_notification_read", { nodeId }),
+  markNotificationsRead: (nodeIds: string[]) =>
+    invoke<void>("mark_notifications_read", { nodeIds }),
+  markAllNotificationsRead: (lastReadAt: string) =>
+    invoke<void>("mark_all_notifications_read", { lastReadAt }),
   createIssue: (repo: string, input: NewIssueInput) =>
     invoke<Issue>("create_issue", { repo, input }),
   toggleIssueState: (repo: string, number: number, closed: boolean) =>

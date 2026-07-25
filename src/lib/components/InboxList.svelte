@@ -115,6 +115,35 @@
     return `${Math.floor(s / 86400)}d`;
   }
 
+  // ---- Selection state ----
+  // Ids only; the rows themselves are replaced wholesale on every refresh
+  // (App.svelte drops scrolled-in pages), so holding item references would
+  // pin stale objects.
+  let selectedIds = $state(new Set<string>());
+
+  function toggleSelect(nodeId: string) {
+    const next = new Set(selectedIds);
+    if (next.has(nodeId)) next.delete(nodeId);
+    else next.add(nodeId);
+    selectedIds = next;
+  }
+
+  function clearSelection() {
+    selectedIds = new Set();
+  }
+
+  /** The selection intersected with what's actually on screen. Every action
+   * and every count derives from this, never from `selectedIds` directly:
+   * filters narrow `filtered` and the 90s refresh replaces `$inbox` outright,
+   * so the raw set can hold ids with no visible row — and marking a thread
+   * read is a real PATCH to GitHub, not a local dismissal. Acting on rows the
+   * user can't see would mutate their inbox behind their back. */
+  const selectedVisible = $derived(
+    filtered.filter((i) => selectedIds.has(i.issue.node_id)),
+  );
+  const anySelected = $derived(selectedVisible.length > 0);
+
+  // ---- Mark-read actions ----
   /** Mark an item read — flips it locally (optimistic, matches the row
    * staying visible like github.com/notifications does for read items) and
    * marks the real GitHub notification thread read. The Inbox is a mirror,
@@ -127,6 +156,89 @@
       .markNotificationRead(nodeId)
       .catch((e) => console.warn("[ghtasks] mark_notification_read failed:", e));
   }
+
+  /** Flip a set of ids read locally, then push the same set to GitHub. On
+   * failure the rows revert, so the list stops claiming a state GitHub
+   * rejected — the next refresh would undo them anyway, just 90s later. */
+  function markManyRead(ids: string[]) {
+    if (ids.length === 0) return;
+    const target = new Set(ids);
+    const wasUnread = new Set(
+      $inbox
+        .filter((i) => i.unread && target.has(i.issue.node_id))
+        .map((i) => i.issue.node_id),
+    );
+    $inbox = $inbox.map((i) =>
+      target.has(i.issue.node_id) ? { ...i, unread: false } : i,
+    );
+    void api.markNotificationsRead(ids).catch((e) => {
+      console.warn("[ghtasks] mark_notifications_read failed:", e);
+      $inbox = $inbox.map((i) =>
+        wasUnread.has(i.issue.node_id) ? { ...i, unread: true } : i,
+      );
+    });
+  }
+
+  function markSelectedRead() {
+    markManyRead(selectedVisible.map((i) => i.issue.node_id));
+    clearSelection();
+  }
+
+  // ---- "Mark all as read" ----
+  // Two different operations wear this label, and conflating them is what
+  // makes it a lie: with no filter it means the user's whole GitHub inbox
+  // (including threads never paged in), which only `PUT /notifications` can
+  // do; under a filter it can only honestly mean the rows on screen.
+  const filteringActive = $derived(
+    $inboxCategoryFilters.size > 0 ||
+      $inboxUnreadOnly ||
+      searchQuery.trim() !== "",
+  );
+  const visibleUnread = $derived(filtered.filter((i) => i.unread));
+  const canMarkAll = $derived(
+    filteringActive ? visibleUnread.length > 0 : $inbox.some((i) => i.unread),
+  );
+  const markAllLabel = $derived(
+    filteringActive ? `Mark ${visibleUnread.length} read` : "Mark all read",
+  );
+
+  /** Armed by the first click; the second confirms. Bulk mark-read can't be
+   * undone from this app, and unfiltered it reaches threads that were never
+   * on screen, so it doesn't get to fire on a single stray click. */
+  let markAllArmed = $state(false);
+  let disarmTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function disarmMarkAll() {
+    markAllArmed = false;
+    clearTimeout(disarmTimer);
+  }
+
+  function markAllRead() {
+    if (!canMarkAll) return;
+    if (!markAllArmed) {
+      markAllArmed = true;
+      clearTimeout(disarmTimer);
+      disarmTimer = setTimeout(() => (markAllArmed = false), 4000);
+      return;
+    }
+    disarmMarkAll();
+
+    if (filteringActive) {
+      markManyRead(visibleUnread.map((i) => i.issue.node_id));
+    } else {
+      const ids = new Set($inbox.filter((i) => i.unread).map((i) => i.issue.node_id));
+      $inbox = $inbox.map((i) => (i.unread ? { ...i, unread: false } : i));
+      void api.markAllNotificationsRead(new Date().toISOString()).catch((e) => {
+        console.warn("[ghtasks] mark_all_notifications_read failed:", e);
+        $inbox = $inbox.map((i) =>
+          ids.has(i.issue.node_id) ? { ...i, unread: true } : i,
+        );
+      });
+    }
+    clearSelection();
+  }
+
+  $effect(() => () => clearTimeout(disarmTimer));
 
   async function open(issue: Issue) {
     markRead(issue.node_id);
@@ -233,6 +345,44 @@
     </div>
   {/if}
 
+  <!-- Bulk actions. Lives on its own row rather than in the toolbar: at the
+       app's fixed 480px width the toolbar has no room left once a category
+       label is showing, and it gives the confirm step somewhere to expand. -->
+  {#if anySelected || canMarkAll}
+    <div class="bulk-bar">
+      {#if anySelected}
+        <span class="count">{selectedVisible.length} selected</span>
+        <button
+          class="mark-btn"
+          title="Mark selected notifications as read"
+          onclick={markSelectedRead}
+        >
+          <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M13.78 4.22a.75.75 0 0 1 0 1.06l-6.5 6.5a.75.75 0 0 1-1.06 0l-3-3a.75.75 0 1 1 1.06-1.06L6.75 10.19l5.97-5.97a.75.75 0 0 1 1.06 0Z"
+            />
+          </svg>
+          Mark as read
+        </button>
+        <button class="clear-btn" onclick={clearSelection}>Clear</button>
+      {/if}
+      {#if canMarkAll}
+        <button
+          class="mark-all-btn"
+          class:armed={markAllArmed}
+          title={filteringActive
+            ? "Mark the unread notifications matching this filter as read"
+            : "Mark your entire GitHub notification inbox as read"}
+          onclick={markAllRead}
+          onblur={disarmMarkAll}
+        >
+          {markAllArmed ? "Click again to confirm" : markAllLabel}
+        </button>
+      {/if}
+    </div>
+  {/if}
+
   {#if $inbox.length === 0}
     <div class="empty">
       <div class="empty-icon">✓</div>
@@ -254,7 +404,26 @@
   {:else}
     <ul class="issues" data-density={$rowDensity}>
       {#each filtered as item (item.issue.node_id)}
-        <li class="issue" class:read={!item.unread}>
+        <li
+          class="issue"
+          class:read={!item.unread}
+          class:selected={selectedIds.has(item.issue.node_id)}
+        >
+          <button
+            class="cb"
+            class:checked={selectedIds.has(item.issue.node_id)}
+            aria-label="Select {item.issue.title}"
+            aria-checked={selectedIds.has(item.issue.node_id)}
+            role="checkbox"
+            onclick={() => toggleSelect(item.issue.node_id)}
+          >
+            <svg viewBox="0 0 16 16" width="10" height="10" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M13.78 4.22a.75.75 0 0 1 0 1.06l-6.5 6.5a.75.75 0 0 1-1.06 0l-3-3a.75.75 0 1 1 1.06-1.06L6.75 10.19l5.97-5.97a.75.75 0 0 1 1.06 0Z"
+              />
+            </svg>
+          </button>
           <span class="unread-dot" class:visible={item.unread} aria-hidden="true"
           ></span>
           <div class="body">
@@ -440,6 +609,77 @@
     color: var(--text);
     background: var(--bg-hover);
   }
+
+  /* ---- Bulk-action bar ---- */
+  .bulk-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    flex: 0 0 auto;
+  }
+  .bulk-bar .count {
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 600;
+    flex: 0 0 auto;
+  }
+  .bulk-bar .mark-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    background: color-mix(in srgb, #3fb950 12%, transparent);
+    border: 1px solid color-mix(in srgb, #3fb950 30%, transparent);
+    border-radius: 6px;
+    font-size: 11px;
+    color: #3fb950;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.12s;
+  }
+  .bulk-bar .mark-btn:hover {
+    background: color-mix(in srgb, #3fb950 20%, transparent);
+  }
+  .bulk-bar .clear-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    font-size: 11px;
+    cursor: pointer;
+    padding: 2px 4px;
+    flex: 0 0 auto;
+  }
+  .bulk-bar .clear-btn:hover {
+    color: var(--text);
+  }
+  /* Pushed to the trailing edge so the irreversible action never sits where
+     the eye expects "Mark as read" for the current selection. */
+  .bulk-bar .mark-all-btn {
+    margin-left: auto;
+    padding: 2px 8px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--text-dim);
+    cursor: pointer;
+    white-space: nowrap;
+    flex: 0 0 auto;
+    transition: color 0.12s, background 0.12s, border-color 0.12s;
+  }
+  .bulk-bar .mark-all-btn:hover {
+    color: #3fb950;
+    background: color-mix(in srgb, #3fb950 10%, transparent);
+  }
+  .bulk-bar .mark-all-btn.armed {
+    color: #3fb950;
+    border-color: color-mix(in srgb, #3fb950 45%, transparent);
+    background: color-mix(in srgb, #3fb950 14%, transparent);
+  }
+
   .act {
     all: unset;
     cursor: pointer;
@@ -489,6 +729,52 @@
   }
   .issue:hover {
     background-color: var(--bg-elev);
+  }
+  .issue.selected {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+  .issue.selected:hover {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+
+  /* Checkbox — dimmed until the row is hovered, selected, or focused. It's a
+     tab stop on every row, so it must never be both focused and invisible;
+     `all: unset` drops the UA focus ring and the border-box default, so both
+     are restored explicitly. */
+  .cb {
+    all: unset;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    margin-top: 1px;
+    border-radius: 4px;
+    border: 1.5px solid var(--border);
+    background: transparent;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: transparent;
+    transition: background 0.1s, border-color 0.1s, opacity 0.1s;
+    opacity: 0;
+  }
+  .issue:hover .cb,
+  .issue.selected .cb,
+  .cb:focus-visible {
+    opacity: 1;
+  }
+  .cb:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .cb:hover {
+    border-color: var(--text-dim);
+  }
+  .cb.checked {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
   }
   .unread-dot {
     flex: 0 0 auto;

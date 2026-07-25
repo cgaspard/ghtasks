@@ -7,6 +7,7 @@ use crate::projects::{self, ProjectSnapshot, ProjectSummary};
 use tauri::Emitter;
 use crate::sources::{self, Settings, Source};
 use serde::Serialize;
+use std::sync::Arc;
 use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
@@ -433,6 +434,80 @@ pub async fn mark_notification_read(
         return Ok(());
     };
     github::mark_thread_read(&state.http, &token, thread_id).await
+}
+
+/// GitHub asks that requests for a single user be made serially and caps
+/// concurrency and mutative "points" per minute. A small window keeps a bulk
+/// mark-read responsive without tripping the secondary rate limit, which would
+/// apply token-wide and fail the next `refresh()` too.
+const MARK_READ_CONCURRENCY: usize = 4;
+
+/// Batch variant of [`mark_notification_read`] for the Inbox's multi-select.
+/// Each `node_id` is `notif:{thread_id}`. Every thread is attempted even if
+/// some fail, but the first error is returned once they all settle — the
+/// frontend flips rows read optimistically, so silently swallowing failures
+/// would leave the UI claiming a state GitHub never accepted.
+#[tauri::command]
+pub async fn mark_notifications_read(
+    state: State<'_, AppState>,
+    node_ids: Vec<String>,
+) -> Result<()> {
+    let token = require_token().await?;
+    let sem = Arc::new(tokio::sync::Semaphore::new(MARK_READ_CONCURRENCY));
+    let mut handles = Vec::new();
+    for nid in node_ids {
+        let Some(tid) = nid.strip_prefix("notif:") else {
+            continue;
+        };
+        let tid = tid.to_string();
+        let http = state.http.clone();
+        let tok = token.clone();
+        let sem = sem.clone();
+        handles.push(tokio::spawn(async move {
+            let _permit = sem.acquire().await;
+            github::mark_thread_read(&http, &tok, &tid)
+                .await
+                .inspect_err(|e| log::warn!("mark_notifications_read: thread {tid}: {e}"))
+        }));
+    }
+
+    let total = handles.len();
+    let mut first_err = None;
+    let mut failed = 0usize;
+    for h in handles {
+        match h.await {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                failed += 1;
+                first_err.get_or_insert(e);
+            }
+            Err(e) => {
+                failed += 1;
+                first_err.get_or_insert(Error::Other(format!("mark-read task panicked: {e}")));
+            }
+        }
+    }
+    match first_err {
+        Some(e) if failed == total => Err(e),
+        Some(e) => Err(Error::Other(format!(
+            "{failed} of {total} notifications could not be marked read: {e}"
+        ))),
+        None => Ok(()),
+    }
+}
+
+/// Mark the whole GitHub inbox read in a single `PUT /notifications`. This is
+/// the honest "Mark all as read": it covers threads the app never paged in,
+/// which a fan-out over loaded rows cannot. `last_read_at` comes from the
+/// frontend so the cutoff is the moment the user clicked, not whenever the
+/// request happens to land.
+#[tauri::command]
+pub async fn mark_all_notifications_read(
+    state: State<'_, AppState>,
+    last_read_at: String,
+) -> Result<()> {
+    let token = require_token().await?;
+    github::mark_all_threads_read(&state.http, &token, &last_read_at).await
 }
 
 #[tauri::command]
