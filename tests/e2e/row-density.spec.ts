@@ -25,7 +25,7 @@ test.describe("row density", () => {
     page,
   }) => {
     await mountApp();
-    await page.getByRole("button", { name: "Issues", exact: true }).click();
+    await page.getByRole("button", { name: "Todos", exact: true }).click();
     await expect(page.locator("ul.issues")).toHaveAttribute(
       "data-density",
       "default",
@@ -81,7 +81,7 @@ test.describe("row density", () => {
       "comfortable",
     );
 
-    await page.getByRole("button", { name: "Issues", exact: true }).click();
+    await page.getByRole("button", { name: "Todos", exact: true }).click();
     await expect(page.locator("ul.issues")).toHaveAttribute(
       "data-density",
       "comfortable",

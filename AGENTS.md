@@ -23,9 +23,9 @@ src/                      Svelte frontend
     persistentStore.ts    localStorage-backed writable() helper
     statusColor.ts        GitHub color palette → CSS
     components/
-      TopBar.svelte       Tabs (Projects/Issues/Inbox) + avatar menu
+      TopBar.svelte       Tabs (Projects/Todos/Inbox) + avatar menu
       ProjectList.svelte  Projects tab
-      IssueList.svelte    Issues tab
+      IssueList.svelte    Todos tab (internal tab id "issues")
       InboxList.svelte     Inbox tab (github.com/notifications mirror)
       InboxBadge.svelte    Amber needs-response cue (inline on Projects/Issues)
       LinkedBadges.svelte Flat colored linked-PR indicator

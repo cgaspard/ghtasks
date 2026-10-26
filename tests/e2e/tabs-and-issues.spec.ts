@@ -3,7 +3,7 @@ import { test, expect } from "./fixtures/app";
 test.describe("tab navigation + Issues tab", () => {
   test("switching to Issues shows repo-search results", async ({ mountApp }) => {
     const page = await mountApp();
-    await page.getByRole("button", { name: "Issues", exact: true }).click();
+    await page.getByRole("button", { name: "Todos", exact: true }).click();
 
     // REPO_ISSUES from mockData.
     await expect(page.getByText("Update the README")).toBeVisible();
@@ -14,7 +14,7 @@ test.describe("tab navigation + Issues tab", () => {
     mountApp,
   }) => {
     const page = await mountApp();
-    await page.getByRole("button", { name: "Issues", exact: true }).click();
+    await page.getByRole("button", { name: "Todos", exact: true }).click();
     await expect(page.getByText("Update the README")).toBeVisible();
 
     await page
@@ -28,7 +28,7 @@ test.describe("tab navigation + Issues tab", () => {
 
   test("Issues tab label filter matches", async ({ mountApp }) => {
     const page = await mountApp();
-    await page.getByRole("button", { name: "Issues", exact: true }).click();
+    await page.getByRole("button", { name: "Todos", exact: true }).click();
     await page
       .getByPlaceholder("Filter by title, label, or #number…")
       .fill("tech-debt");
@@ -41,7 +41,7 @@ test.describe("tab navigation + Issues tab", () => {
     page,
   }) => {
     await mountApp();
-    await page.getByRole("button", { name: "Issues", exact: true }).click();
+    await page.getByRole("button", { name: "Todos", exact: true }).click();
     await expect(page.getByText("Update the README")).toBeVisible();
 
     await page.reload();
@@ -55,7 +55,7 @@ test.describe("tab navigation + Issues tab", () => {
     const page = await mountApp({
       sourceResults: [{ source_id: "src-repo-1", issues: [], error: null }],
     });
-    await page.getByRole("button", { name: "Issues", exact: true }).click();
+    await page.getByRole("button", { name: "Todos", exact: true }).click();
     await expect(page.getByText(/No issues match/i)).toBeVisible();
   });
 });

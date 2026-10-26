@@ -14,7 +14,7 @@ mkdirSync(OUT, { recursive: true });
 // Each shot -> a gradient backdrop pairing (brand blue / violet / green tints).
 const FRAMES: { name: string; grad: [string, string]; title: string }[] = [
   { name: "projects", grad: ["#1b2a4a", "#0c1220"], title: "GitHub Tasks — Projects" },
-  { name: "issues", grad: ["#241b4a", "#0c1220"], title: "GitHub Tasks — Issues" },
+  { name: "issues", grad: ["#241b4a", "#0c1220"], title: "GitHub Tasks — Todos" },
   { name: "inbox", grad: ["#0f3326", "#0c1220"], title: "GitHub Tasks — Inbox" },
   { name: "inbox-filter", grad: ["#0f3326", "#0c1220"], title: "GitHub Tasks — Inbox" },
   { name: "projects-status-filter", grad: ["#1b2a4a", "#0c1220"], title: "GitHub Tasks" },

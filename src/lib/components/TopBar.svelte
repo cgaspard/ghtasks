@@ -102,7 +102,7 @@
     >
     <button
       class:active={$activeTab === "issues"}
-      onclick={() => ($activeTab = "issues")}>Issues</button
+      onclick={() => ($activeTab = "issues")}>Todos</button
     >
     <button
       class="await-tab"

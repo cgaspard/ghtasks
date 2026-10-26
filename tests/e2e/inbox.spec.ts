@@ -171,7 +171,7 @@ test.describe("inbox", () => {
     page,
   }) => {
     await mountApp();
-    await page.getByRole("button", { name: "Issues", exact: true }).click();
+    await page.getByRole("button", { name: "Todos", exact: true }).click();
 
     // #92 is review_requested (needs-response) AND a repo issue → indicator shows.
     const row = page

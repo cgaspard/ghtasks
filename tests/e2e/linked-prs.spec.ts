@@ -78,7 +78,7 @@ test.describe("linked PR + milestone badges", () => {
     mountApp,
   }) => {
     const page = await mountApp();
-    await page.getByRole("button", { name: "Issues", exact: true }).click();
+    await page.getByRole("button", { name: "Todos", exact: true }).click();
 
     const row = page
       .locator("li.issue")

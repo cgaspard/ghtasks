@@ -222,7 +222,7 @@
       <div class="cta-icon" aria-hidden="true">📬</div>
       <div class="cta-title">Add your first Repository</div>
       <div class="cta-body">
-        The Issues tab pulls in open issues across any repo you track —
+        The Todos tab pulls in open issues across any repo you track —
         with your own search query (defaults to open Tasks). Great for
         watching a repo you don't own, surfacing bugs assigned to you, or
         keeping tabs on PRs awaiting your review.

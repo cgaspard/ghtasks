@@ -43,7 +43,7 @@ test.describe("New Issue modal", () => {
     await mountApp({ createdIssue: created });
 
     // Go to Issues tab so we can see the optimistic insert.
-    await page.getByRole("button", { name: "Issues", exact: true }).click();
+    await page.getByRole("button", { name: "Todos", exact: true }).click();
     await page.getByRole("button", { name: "+ New" }).click();
     const dialog = page.getByRole("dialog", { name: "New issue" });
 

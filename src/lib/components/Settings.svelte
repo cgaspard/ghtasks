@@ -225,7 +225,7 @@
         </label>
         <div class="hint">
           When on, opening or clearing the needs-response indicator on a
-          Projects/Issues item also marks its GitHub notification read. The
+          Projects/Todos item also marks its GitHub notification read. The
           Inbox tab's own "Mark read" always syncs, regardless of this
           setting.
         </div>

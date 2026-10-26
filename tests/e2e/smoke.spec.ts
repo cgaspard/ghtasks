@@ -9,7 +9,7 @@ test.describe("smoke — harness boots", () => {
       page.getByRole("button", { name: "Projects", exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Issues", exact: true }),
+      page.getByRole("button", { name: "Todos", exact: true }),
     ).toBeVisible();
 
     // Streamed project items land on the board.

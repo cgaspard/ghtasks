@@ -54,7 +54,7 @@ test.describe("marketing captures", () => {
 
   test("issues tab", async ({ mountApp, page }) => {
     await mountApp(heroScenario());
-    await page.getByRole("button", { name: "Issues", exact: true }).click();
+    await page.getByRole("button", { name: "Todos", exact: true }).click();
     await page.getByText("Payments: retry failed Stripe webhooks").waitFor();
     await page.screenshot({ path: `${SHOTS}/issues.png` });
   });

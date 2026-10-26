@@ -85,7 +85,7 @@ test("product demo", async ({ browser }) => {
   await beat(page, 900);
 
   // --- Issues: repo search across sources ---
-  await page.getByRole("button", { name: "Issues", exact: true }).click();
+  await page.getByRole("button", { name: "Todos", exact: true }).click();
   await page.getByText("Payments: retry failed Stripe webhooks").waitFor();
   await beat(page, 1400);
 
