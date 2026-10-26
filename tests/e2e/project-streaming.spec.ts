@@ -53,12 +53,28 @@ function mkPage(items: ReturnType<typeof item>[], is_first: boolean, is_final: b
 
 async function emit(page: import("@playwright/test").Page, evt: unknown) {
   await page.evaluate((e) => {
-    (window as unknown as { __mockEmit: (n: string, p: unknown) => void }).__mockEmit(
+    const w = window as unknown as { __mockEmit: (n: string, p: unknown) => void; __ipcLog: Array<{ cmd: string; args: { generation?: number } }> };
+    const generation = w.__ipcLog.filter((call) => call.cmd === "fetch_all_projects_streaming").at(-1)?.args.generation;
+    w.__mockEmit(
       "project-page",
-      e,
+      { generation, ...(e as Record<string, unknown>) },
     );
   }, evt);
 }
+
+test("late pages from a previous refresh cannot replace the current project items", async ({ mountApp, page }) => {
+  await mountApp({ projectPages: [] });
+  await expect(page.getByRole("button", { name: "Refresh", exact: true })).toBeEnabled();
+  const oldGeneration = await page.evaluate(() => (window as unknown as { __ipcLog: Array<{ cmd: string; args: { generation: number } }> }).__ipcLog.filter((call) => call.cmd === "fetch_all_projects_streaming").at(-1)!.args.generation);
+  await emit(page, mkPage([item("OLD", 201, "Old generation item")], true, true));
+  await expect(page.getByText("Old generation item", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Refresh", exact: true })).toBeEnabled();
+  await emit(page, mkPage([item("NEW", 202, "Current generation item")], true, true));
+  await emit(page, { ...mkPage([item("OLD", 201, "Old generation item")], false, true), generation: oldGeneration });
+  await expect(page.getByText("Current generation item", { exact: true })).toBeVisible();
+  await expect(page.getByText("Old generation item", { exact: true })).toHaveCount(0);
+});
 
 test.describe("project streaming reconciliation", () => {
   test("multi-page stream accumulates items; final page keeps all seen items", async ({

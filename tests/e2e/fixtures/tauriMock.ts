@@ -164,9 +164,17 @@ function installTauriMock(): void {
       // ---- sources ----
       case "list_sources":
         return s.sources || [];
-      case "save_source":
-        return args.source;
+      case "save_source": {
+        const source = { ...(args.source as Record<string, unknown>) };
+        if (!source.id) source.id = window.crypto.randomUUID();
+        const sources = (s.sources as Record<string, unknown>[]) || [];
+        s.sources = sources.some((item) => item.id === source.id)
+          ? sources.map((item) => item.id === source.id ? source : item)
+          : [...sources, source];
+        return source;
+      }
       case "delete_source":
+        s.sources = ((s.sources as Record<string, unknown>[]) || []).filter((source) => source.id !== args.id);
         return null;
 
       // ---- fetch ----
@@ -197,7 +205,7 @@ function installTauriMock(): void {
         // on a microtask so listeners are registered first.
         const pages = (s.projectPages as unknown[]) || [];
         Promise.resolve().then(() => {
-          for (const page of pages) w.__mockEmit("project-page", page);
+          for (const page of pages) w.__mockEmit("project-page", { ...(page as Record<string, unknown>), generation: args.generation });
         });
         return null;
       }
@@ -247,6 +255,7 @@ function installTauriMock(): void {
           beta_updates: false,
         };
       case "save_settings":
+        s.settings = args.settings;
         return null;
       case "notification_permission_status":
         return s.notificationPermissionStatus ?? null;

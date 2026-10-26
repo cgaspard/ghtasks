@@ -34,7 +34,7 @@ pub async fn auth_status(state: State<'_, AppState>) -> Result<AuthStatus> {
                 authenticated: true,
                 user: Some(user),
             }),
-            Err(Error::GitHub { status, .. }) if status == 401 => {
+            Err(Error::GitHub { status: 401, .. }) => {
                 // Token revoked; wipe it.
                 let _ = auth::clear_token();
                 Ok(AuthStatus {
@@ -539,34 +539,47 @@ pub async fn notification_permission_status() -> Option<bool> {
 
 #[tauri::command]
 pub async fn save_settings(app: AppHandle, settings: Settings) -> Result<()> {
-    sources::save_settings(&app, &settings)?;
+    if !(30..=3600).contains(&settings.poll_interval_secs) {
+        return Err(Error::Other("Refresh interval must be between 30 and 3600 seconds".into()));
+    }
+    #[cfg(desktop)]
+    let previous_autostart = {
+        use tauri_plugin_autostart::ManagerExt;
+        app.autolaunch().is_enabled().map_err(|e| Error::Other(format!("Could not check startup setting: {e}")))?
+    };
+    #[cfg(desktop)]
+    if previous_autostart != settings.launch_at_login {
+        apply_autostart(&app, settings.launch_at_login)?;
+    }
+    if let Err(error) = sources::save_settings(&app, &settings) {
+        #[cfg(desktop)]
+        if previous_autostart != settings.launch_at_login {
+            let _ = apply_autostart(&app, previous_autostart);
+        }
+        return Err(error);
+    }
     // Apply any visual settings that need an immediate side effect.
     #[cfg(desktop)]
     {
         if let Some(win) = app.get_webview_window("main") {
             crate::tray::apply_saved_size(&app, &win);
         }
-        // Launch-at-login: sync the autostart plugin with the saved flag.
-        apply_autostart(&app, settings.launch_at_login);
     }
     Ok(())
 }
 
 /// Enable or disable autostart to match the saved setting.
 #[cfg(desktop)]
-fn apply_autostart(app: &AppHandle, enabled: bool) {
+fn apply_autostart(app: &AppHandle, enabled: bool) -> Result<()> {
     use tauri_plugin_autostart::ManagerExt;
     let mgr = app.autolaunch();
-    let currently = mgr.is_enabled().unwrap_or(false);
+    let currently = mgr.is_enabled().map_err(|e| Error::Other(format!("Could not check startup setting: {e}")))?;
     if enabled && !currently {
-        if let Err(e) = mgr.enable() {
-            log::warn!("autostart enable failed: {e}");
-        }
+        mgr.enable().map_err(|e| Error::Other(format!("Could not enable launch at login: {e}")))?;
     } else if !enabled && currently {
-        if let Err(e) = mgr.disable() {
-            log::warn!("autostart disable failed: {e}");
-        }
+        mgr.disable().map_err(|e| Error::Other(format!("Could not disable launch at login: {e}")))?;
     }
+    Ok(())
 }
 
 #[tauri::command]
@@ -574,7 +587,7 @@ pub async fn autostart_status(app: AppHandle) -> Result<bool> {
     #[cfg(desktop)]
     {
         use tauri_plugin_autostart::ManagerExt;
-        Ok(app.autolaunch().is_enabled().unwrap_or(false))
+        app.autolaunch().is_enabled().map_err(|e| Error::Other(format!("Could not check startup setting: {e}")))
     }
     #[cfg(not(desktop))]
     {
@@ -747,7 +760,14 @@ pub async fn fetch_all_projects(
 pub async fn fetch_all_projects_streaming(
     app: AppHandle,
     state: State<'_, AppState>,
+    generation: u64,
 ) -> Result<()> {
+    #[derive(Clone, Serialize)]
+    struct StreamPage {
+        generation: u64,
+        #[serde(flatten)]
+        page: projects::ProjectPageEvent,
+    }
     let overall_start = std::time::Instant::now();
     let token = require_token().await?;
     let all_sources = sources::list_sources(&app)?;
@@ -794,7 +814,7 @@ pub async fn fetch_all_projects_streaming(
                 |evt| {
                     page_count += 1;
                     item_count += evt.items.len();
-                    if let Err(e) = app2.emit("project-page", &evt) {
+                    if let Err(e) = app2.emit("project-page", &StreamPage { generation, page: evt }) {
                         log::warn!("emit project-page failed: {e}");
                     }
                 },

@@ -16,6 +16,7 @@
     lastCacheWriteAt,
     newSinceLastSync,
     recentlyCreated,
+    recentlyClosed,
     pruneRecentlyCreated,
     appVersion,
     appView,
@@ -25,6 +26,12 @@
     inboxHasMore,
     inboxLoadingMore,
     inboxPage,
+    inboxLoading,
+    inboxError,
+    inboxLastSyncAt,
+    pollIntervalSecs,
+    createdIssueNotice,
+    seenInboxCues,
   } from "./lib/stores";
   import { get } from "svelte/store";
   import Login from "./lib/components/Login.svelte";
@@ -34,9 +41,11 @@
   import NewIssue from "./lib/components/NewIssue.svelte";
   import Settings from "./lib/components/Settings.svelte";
   import TopBar from "./lib/components/TopBar.svelte";
+  import SyncFooter from "./lib/components/SyncFooter.svelte";
   import IssueDetail from "./lib/components/IssueDetail.svelte";
   import About from "./lib/components/About.svelte";
   import UpdateBanner from "./lib/components/UpdateBanner.svelte";
+  import { clearNewIssueDraft } from "./lib/newIssueDraft";
 
   let pollHandle: ReturnType<typeof setInterval> | null = null;
   let updateCheckHandle: ReturnType<typeof setInterval> | null = null;
@@ -44,6 +53,7 @@
   /** Bumped on each refresh. Pages arriving for an older generation are
    * ignored so late stragglers don't leak into the next refresh. */
   let refreshGeneration = 0;
+  let inboxGeneration = 0;
   /** Accumulated node_ids before the current refresh started, for new-count. */
   let priorIdsSnapshot: Set<string> = new Set();
   /** Per-source: which item_ids have we seen in the current generation?
@@ -65,8 +75,10 @@
   }
 
   function handleProjectPage(gen: number, evt: ProjectPageEvent) {
-    if (gen !== refreshGeneration) return; // stale
-    $projectResults = reconcileProjectPage($projectResults, gen, evt);
+    if (gen !== refreshGeneration || !$auth.authenticated) return;
+    const closed = get(recentlyClosed);
+    const page = closed.size ? { ...evt, items: evt.items.map((item) => closed.has(item.issue.node_id) ? { ...item, issue: { ...item.issue, state: "closed" } } : item) } : evt;
+    $projectResults = reconcileProjectPage($projectResults, gen, page);
   }
 
   /** Merge an incoming page into the existing snapshot **without clearing**
@@ -164,9 +176,11 @@
   ): typeof $sourceResults {
     pruneRecentlyCreated();
     const recents = [...get(recentlyCreated).values()];
-    if (recents.length === 0) return serverResults;
-    let out = serverResults.map((r) => ({ ...r, issues: [...r.issues] }));
+    const closed = get(recentlyClosed);
+    let out = serverResults.map((r) => ({ ...r, issues: r.issues.filter((issue) => !closed.has(issue.node_id)) }));
+    if (recents.length === 0) return out;
     for (const entry of recents) {
+      if (entry.issue.state === "closed" || closed.has(entry.issue.node_id)) continue;
       const targetSourceId = currentSources.find(
         (s) => s.kind === "repo" && s.repo === entry.repo && s.enabled,
       )?.id;
@@ -190,6 +204,7 @@
     const gen = refreshGeneration;
     priorIdsSnapshot = knownNodeIds();
     pruneRecentlyCreated();
+    void refreshInbox();
     console.log(
       `[ghtasks] refresh() gen=${gen} streaming projects + fetching repos`,
     );
@@ -199,9 +214,9 @@
       const [srcs, results] = await Promise.all([
         api.listSources(),
         api.fetchAll(),
-        api.fetchAllProjectsStreaming(),
+        api.fetchAllProjectsStreaming(gen),
       ]);
-      if (gen !== refreshGeneration) return; // superseded
+      if (gen !== refreshGeneration || !$auth.authenticated) return;
       $sources = srcs;
       // Before replacing repo source results, keep items that are in our
       // recently-created buffer (Search API needs ~60s to index).
@@ -227,21 +242,6 @@
         `[ghtasks] refresh() gen=${gen} complete: ${srcs.length} source(s), ${issueTotal} issue(s), ${projectTotal} project item(s), new=${$newSinceLastSync}`,
       );
 
-      // Inbox scan is independent + best-effort: a failure here must never
-      // break the projects/issues refresh, so it's fire-and-forget. A refresh
-      // always re-fetches page 1 (the live "what's current" view) and
-      // replaces the inbox wholesale — any older pages loaded via scroll are
-      // dropped, matching the rest of the app's "refresh replaces" model.
-      void api
-        .fetchInbox(1)
-        .then((page) => {
-          if (gen === refreshGeneration) {
-            $inbox = page.items;
-            $inboxHasMore = page.has_more;
-            $inboxPage = 1;
-          }
-        })
-        .catch((e) => console.warn("[ghtasks] fetch_inbox failed:", e));
     } catch (e) {
       console.error("[ghtasks] refresh() failed:", e);
       $lastError = String(e);
@@ -250,24 +250,47 @@
     }
   }
 
+  async function refreshInbox() {
+    if (!$auth.authenticated) return;
+    const gen = ++inboxGeneration;
+    $inboxLoading = true;
+    $inboxLoadingMore = false;
+    $inboxError = null;
+    try {
+      const page = await api.fetchInbox(1);
+      if (gen !== inboxGeneration || !$auth.authenticated) return;
+      $inbox = page.items;
+      $inboxHasMore = page.has_more;
+      $inboxPage = 1;
+      $inboxLastSyncAt = Date.now();
+    } catch (e) {
+      if (gen === inboxGeneration) $inboxError = String(e);
+    } finally {
+      if (gen === inboxGeneration) $inboxLoading = false;
+    }
+  }
+
   /** Append the next page of older inbox items (infinite scroll). Never
    * touches notify bookkeeping or replaces page 1 — it's pure history
    * browsing, so a scroll can't trigger a desktop notification. */
   async function loadMoreInbox() {
-    if (get(inboxLoadingMore) || !get(inboxHasMore)) return;
+    if (get(inboxLoadingMore) || get(inboxLoading) || !get(inboxHasMore)) return;
+    const gen = inboxGeneration;
     const nextPage = get(inboxPage) + 1;
     $inboxLoadingMore = true;
+    $inboxError = null;
     try {
       const page = await api.fetchInbox(nextPage);
+      if (gen !== inboxGeneration || !$auth.authenticated) return;
       const existingIds = new Set($inbox.map((i) => i.issue.node_id));
       const fresh = page.items.filter((i) => !existingIds.has(i.issue.node_id));
       $inbox = [...$inbox, ...fresh];
       $inboxHasMore = page.has_more;
       $inboxPage = nextPage;
     } catch (e) {
-      console.warn("[ghtasks] loadMoreInbox failed:", e);
+      if (gen === inboxGeneration) $inboxError = String(e);
     } finally {
-      $inboxLoadingMore = false;
+      if (gen === inboxGeneration) $inboxLoadingMore = false;
     }
   }
 
@@ -315,7 +338,7 @@
     // Subscribe to streamed project pages once. Each event gets merged
     // into $projectResults, gated by generation so stale pages are dropped.
     void listen<ProjectPageEvent>("project-page", (e) => {
-      handleProjectPage(refreshGeneration, e.payload);
+      handleProjectPage(e.payload.generation, e.payload);
     }).then((fn) => {
       unlistenProjectPage = fn;
     });
@@ -326,7 +349,10 @@
     // store already painted the last-known value on cold launch.
     void api
       .getSettings()
-      .then((s) => ($rowDensity = resolveRowDensity(s.row_density)))
+      .then((s) => {
+        $rowDensity = resolveRowDensity(s.row_density);
+        $pollIntervalSecs = s.poll_interval_secs;
+      })
       .catch(() => {});
 
     // Mirror `$updateAvailable` into the macOS tray icon. Swaps to an
@@ -369,16 +395,49 @@
     updateCheckHandle = setInterval(backgroundUpdateCheck, 4 * 60 * 60 * 1000);
 
     void refreshAuth();
-    // Poll every 90s while authenticated.
-    pollHandle = setInterval(() => {
-      if ($auth.authenticated) refresh();
-    }, 90_000);
+    const unsubPoll = pollIntervalSecs.subscribe((seconds) => {
+      if (pollHandle) clearInterval(pollHandle);
+      const interval = Number.isFinite(seconds) ? Math.min(3600, Math.max(30, seconds)) : 90;
+      pollHandle = setInterval(() => {
+        if ($auth.authenticated && !$loading) void refresh();
+      }, interval * 1000);
+    });
+    let wasAuthenticated = $auth.authenticated;
+    const unsubAuth = auth.subscribe((status) => {
+      if (wasAuthenticated && !status.authenticated) {
+        refreshGeneration++;
+        inboxGeneration++;
+        seenItemsByGen.clear();
+        $sources = [];
+        $sourceResults = [];
+        $projectResults = [];
+        $inbox = [];
+        $recentlyCreated = new Map();
+        $recentlyClosed = new Map();
+        $seenInboxCues = {};
+        clearNewIssueDraft();
+        localStorage.removeItem("ghtasks.sourceEditorDraft");
+        $lastSyncAt = null;
+        $lastCacheWriteAt = null;
+        $inboxLastSyncAt = null;
+        $inboxError = null;
+        $inboxLoading = false;
+        $inboxLoadingMore = false;
+        $loading = false;
+        $showNewIssue = false;
+        $createdIssueNotice = null;
+        $appView = { kind: "list" };
+      }
+      wasAuthenticated = status.authenticated;
+    });
     window.addEventListener("keydown", onKeydown);
     return () => {
       if (pollHandle) clearInterval(pollHandle);
       if (updateCheckHandle) clearInterval(updateCheckHandle);
       if (unlistenProjectPage) unlistenProjectPage();
       unsubUpdate();
+      unsubPoll();
+      unsubAuth();
       window.removeEventListener("keydown", onKeydown);
     };
   });
@@ -388,7 +447,8 @@
   {#if !$auth.authenticated}
     <Login onAuthed={refreshAuth} />
   {:else}
-    <TopBar onRefresh={refresh} />
+    <div class="workspace" inert={$showNewIssue ? true : null}>
+    <TopBar />
     <div class="body">
       <div class="slider" class:to-detail={$appView.kind !== "list"}>
         <div
@@ -400,7 +460,7 @@
           {:else if $activeTab === "issues"}
             <IssueList />
           {:else if $activeTab === "inbox"}
-            <InboxList onLoadMore={loadMoreInbox} />
+            <InboxList onLoadMore={loadMoreInbox} onRetry={refreshInbox} />
           {:else if $activeTab === "settings"}
             <Settings onSourcesChanged={refresh} />
           {/if}
@@ -422,12 +482,27 @@
       </div>
     </div>
     <UpdateBanner />
+    {#if $createdIssueNotice}
+      <div class="created-notice" role="status">
+        <span>Issue #{$createdIssueNotice.issue.number} created in {$createdIssueNotice.repo}</span>
+        <button onclick={() => {
+          if (!$createdIssueNotice) return;
+          $appView = { kind: "detail", repo: $createdIssueNotice.repo, number: $createdIssueNotice.issue.number, nodeId: $createdIssueNotice.issue.node_id };
+          $createdIssueNotice = null;
+        }}>View issue</button>
+        <button class="ghost" aria-label="Dismiss creation notice" onclick={() => ($createdIssueNotice = null)}>✕</button>
+      </div>
+    {/if}
+    {#if $activeTab !== "settings" || $appView.kind !== "list"}
+      <SyncFooter onRefresh={refresh} />
+    {/if}
+    </div>
     {#if $showNewIssue}
       <NewIssue onCreated={refresh} />
     {/if}
   {/if}
   {#if $lastError}
-    <div class="error" role="alert">{$lastError}</div>
+    <div class="error" role="alert" inert={$showNewIssue ? true : null}><span>{$lastError}</span><button class="ghost" aria-label="Dismiss error" onclick={() => ($lastError = null)}>✕</button></div>
   {/if}
 </main>
 
@@ -445,6 +520,10 @@
     position: relative;
     overflow: hidden;
   }
+  .workspace { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .created-notice { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-top: 1px solid var(--border); background: var(--bg-elev); font-size: 12px; }
+  .created-notice span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .created-notice button { flex-shrink: 0; padding: 4px 8px; font-size: 12px; }
   .slider {
     position: absolute;
     top: 0;
@@ -472,10 +551,17 @@
     overflow: hidden;
   }
   .error {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
     background: rgba(229, 72, 77, 0.15);
     color: #ffb4b7;
     padding: 6px 10px;
     font-size: 12px;
     border-top: 1px solid rgba(229, 72, 77, 0.3);
   }
+  .error span { overflow-wrap: anywhere; }
+  .error button { flex-shrink: 0; padding: 2px 6px; }
+  @media (prefers-reduced-motion: reduce) { .slider { transition: none; } }
 </style>

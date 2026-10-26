@@ -1,6 +1,6 @@
 import { test, expect } from "./fixtures/app";
 
-// Row density (Settings → General) switches the list between three presets:
+// Row density (Settings → Appearance) switches the list between presets:
 //   compact      → 2 rows, labels fold inline onto row 2 (truncated)
 //   default      → 3 rows; row 2 (PR · repo · time) never wraps, labels on row 3
 //   comfortable  → 3 rows, same structure, larger type/padding
@@ -9,6 +9,7 @@ import { test, expect } from "./fixtures/app";
 async function openSettings(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: "octocat" }).click();
   await page.getByRole("menuitem", { name: "Settings" }).click();
+  await page.getByRole("button", { name: /Appearance.*Window height/ }).click();
 }
 
 test.describe("row density", () => {

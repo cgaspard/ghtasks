@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
+  import { floatingMenu } from "../floatingMenu";
   import { statusColor } from "../statusColor";
 
   interface Option {
@@ -18,6 +19,7 @@
     /** "pill" = tinted rounded pill (legacy); "tag" = flat uppercase colored
      * text (G×F·4 row design). Both still open the same picker menu. */
     variant?: "pill" | "tag";
+    ariaLabel?: string;
   }
 
   let {
@@ -27,19 +29,53 @@
     options,
     onPick,
     variant = "pill",
+    ariaLabel,
   }: Props = $props();
 
   let open = $state(false);
   let root: HTMLDivElement | undefined = $state();
+  let menu: HTMLDivElement | undefined = $state();
+  let trigger: HTMLButtonElement | undefined = $state();
+
+  async function toggle() {
+    open = !open;
+    if (open) {
+      await tick();
+      menu?.querySelector<HTMLButtonElement>(".opt.selected, .opt")?.focus();
+    }
+  }
+  function pick(id: string | null) {
+    open = false;
+    trigger?.focus();
+    onPick(id);
+  }
+  function onKey(e: KeyboardEvent) {
+    if (!open) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      open = false;
+      trigger?.focus();
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const options = [...(menu?.querySelectorAll<HTMLButtonElement>(".opt") ?? [])];
+      const current = options.indexOf(document.activeElement as HTMLButtonElement);
+      options[(current + (e.key === "ArrowDown" ? 1 : -1) + options.length) % options.length]?.focus();
+    }
+  }
 
   function onDocClick(e: MouseEvent) {
     if (!open) return;
-    if (root && !root.contains(e.target as Node)) open = false;
+    if (root && !root.contains(e.target as Node) && !menu?.contains(e.target as Node)) open = false;
   }
 
   onMount(() => {
     document.addEventListener("click", onDocClick);
-    return () => document.removeEventListener("click", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("click", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
   });
 
   const c = $derived(statusColor(valueColor));
@@ -51,7 +87,11 @@
       type="button"
       class="tag"
       class:unset={!value}
-      onclick={() => (open = !open)}
+      onclick={toggle}
+      bind:this={trigger}
+      aria-label={ariaLabel}
+      aria-haspopup="menu"
+      aria-expanded={open}
       style="--status-solid: {c.solid};"
       title={valueName ?? "No Status"}
     >
@@ -63,7 +103,11 @@
       type="button"
       class="pill"
       class:unset={!value}
-      onclick={() => (open = !open)}
+      onclick={toggle}
+      bind:this={trigger}
+      aria-label={ariaLabel}
+      aria-haspopup="menu"
+      aria-expanded={open}
       style="--status-solid: {c.solid}; --status-tint: {c.tint}; --status-ink: {c.ink};"
       title={valueName ?? "No Status"}
     >
@@ -74,15 +118,14 @@
   {/if}
 
   {#if open}
-    <div class="menu" role="menu">
+    <div class="menu" role="menu" bind:this={menu} use:floatingMenu={{ anchor: root!, align: "end" }}>
       <button
         type="button"
         class="opt"
         class:selected={!value}
-        onclick={() => {
-          onPick(null);
-          open = false;
-        }}
+        role="menuitemradio"
+        aria-checked={!value}
+        onclick={() => pick(null)}
       >
         <span class="opt-dot unset" aria-hidden="true"></span>
         <span class="opt-label">No Status</span>
@@ -94,10 +137,9 @@
           type="button"
           class="opt"
           class:selected={o.id === value}
-          onclick={() => {
-            onPick(o.id);
-            open = false;
-          }}
+          role="menuitemradio"
+          aria-checked={o.id === value}
+          onclick={() => pick(o.id)}
         >
           <span
             class="opt-dot"
@@ -206,6 +248,8 @@
     padding: 5px 10px;
     font-size: 12px;
     color: var(--text);
+    box-sizing: border-box;
+    width: 100%;
   }
   .opt:hover {
     background: var(--bg-hover);

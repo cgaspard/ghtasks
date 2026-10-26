@@ -15,11 +15,20 @@
     inboxLoadingMore,
     inboxCategoryFilters,
     inboxUnreadOnly,
+    cardViews,
+    inboxLoading,
+    inboxError,
+    inboxLastSyncAt,
   } from "../stores";
   import LinkedBadges from "./LinkedBadges.svelte";
   import FilterPicker from "./FilterPicker.svelte";
+  import CardViewToggle from "./CardViewToggle.svelte";
 
-  let { onLoadMore }: { onLoadMore: () => void | Promise<void> } = $props();
+  let { onLoadMore, onRetry }: { onLoadMore: () => void | Promise<void>; onRetry?: () => void | Promise<void> } = $props();
+  let actionError: string | null = $state(null);
+  let retryAction: (() => void | Promise<unknown>) | null = $state(null);
+  let pendingIds = $state(new Set<string>());
+  const mutating = $derived(pendingIds.size > 0);
 
   // Quiet muted reason label per row — maps raw GitHub reasons to friendly text.
   function reasonLabel(reason: string): string {
@@ -148,20 +157,34 @@
    * staying visible like github.com/notifications does for read items) and
    * marks the real GitHub notification thread read. The Inbox is a mirror,
    * so this is never a local-only dismissal — it always reaches GitHub. */
-  function markRead(nodeId: string) {
+  async function markRead(nodeId: string) {
+    const item = $inbox.find((entry) => entry.issue.node_id === nodeId);
+    if (!item?.unread || pendingIds.has(nodeId)) return;
+    pendingIds = new Set([...pendingIds, nodeId]);
+    actionError = null;
+    retryAction = null;
     $inbox = $inbox.map((i) =>
       i.issue.node_id === nodeId ? { ...i, unread: false } : i,
     );
-    void api
-      .markNotificationRead(nodeId)
-      .catch((e) => console.warn("[ghtasks] mark_notification_read failed:", e));
+    try {
+      await api.markNotificationRead(nodeId);
+    } catch (e) {
+      $inbox = $inbox.map((entry) => entry.issue.node_id === nodeId ? { ...entry, unread: true } : entry);
+      actionError = `Couldn’t mark this notification read. ${String(e)}`;
+      retryAction = () => markRead(nodeId);
+    } finally {
+      pendingIds = new Set([...pendingIds].filter((id) => id !== nodeId));
+    }
   }
 
   /** Flip a set of ids read locally, then push the same set to GitHub. On
    * failure the rows revert, so the list stops claiming a state GitHub
    * rejected — the next refresh would undo them anyway, just 90s later. */
-  function markManyRead(ids: string[]) {
-    if (ids.length === 0) return;
+  async function markManyRead(ids: string[]): Promise<boolean> {
+    if (ids.length === 0 || mutating) return false;
+    actionError = null;
+    retryAction = null;
+    pendingIds = new Set(ids);
     const target = new Set(ids);
     const wasUnread = new Set(
       $inbox
@@ -171,17 +194,23 @@
     $inbox = $inbox.map((i) =>
       target.has(i.issue.node_id) ? { ...i, unread: false } : i,
     );
-    void api.markNotificationsRead(ids).catch((e) => {
-      console.warn("[ghtasks] mark_notifications_read failed:", e);
+    try {
+      await api.markNotificationsRead(ids);
+      return true;
+    } catch (e) {
       $inbox = $inbox.map((i) =>
         wasUnread.has(i.issue.node_id) ? { ...i, unread: true } : i,
       );
-    });
+      actionError = `Couldn’t mark these notifications read. ${String(e)}`;
+      retryAction = () => markManyRead(ids);
+      return false;
+    } finally {
+      pendingIds = new Set();
+    }
   }
 
-  function markSelectedRead() {
-    markManyRead(selectedVisible.map((i) => i.issue.node_id));
-    clearSelection();
+  async function markSelectedRead() {
+    if (await markManyRead(selectedVisible.map((i) => i.issue.node_id))) clearSelection();
   }
 
   // ---- "Mark all as read" ----
@@ -213,8 +242,8 @@
     clearTimeout(disarmTimer);
   }
 
-  function markAllRead() {
-    if (!canMarkAll) return;
+  async function markAllRead() {
+    if (!canMarkAll || mutating) return;
     if (!markAllArmed) {
       markAllArmed = true;
       clearTimeout(disarmTimer);
@@ -224,34 +253,52 @@
     disarmMarkAll();
 
     if (filteringActive) {
-      markManyRead(visibleUnread.map((i) => i.issue.node_id));
+      if (await markManyRead(visibleUnread.map((i) => i.issue.node_id))) clearSelection();
     } else {
+      await markEntireInboxRead();
+    }
+  }
+
+  async function markEntireInboxRead() {
+      if (mutating) return;
+      actionError = null;
+      retryAction = null;
       const ids = new Set($inbox.filter((i) => i.unread).map((i) => i.issue.node_id));
+      pendingIds = ids;
       $inbox = $inbox.map((i) => (i.unread ? { ...i, unread: false } : i));
-      void api.markAllNotificationsRead(new Date().toISOString()).catch((e) => {
-        console.warn("[ghtasks] mark_all_notifications_read failed:", e);
+      try {
+        await api.markAllNotificationsRead(new Date().toISOString());
+        clearSelection();
+      } catch (e) {
         $inbox = $inbox.map((i) =>
           ids.has(i.issue.node_id) ? { ...i, unread: true } : i,
         );
-      });
-    }
-    clearSelection();
+        actionError = `Couldn’t mark your GitHub inbox read. ${String(e)}`;
+        retryAction = markEntireInboxRead;
+      } finally {
+        pendingIds = new Set();
+      }
   }
 
   $effect(() => () => clearTimeout(disarmTimer));
 
   async function open(issue: Issue) {
-    markRead(issue.node_id);
-    await openUrl(issue.html_url);
+    void markRead(issue.node_id);
+    try {
+      await openUrl(issue.html_url);
+    } catch (e) {
+      actionError = `Couldn’t open GitHub. ${String(e)}`;
+      retryAction = () => open(issue);
+    }
   }
 
-  /** The chevron opens the item. Concrete issues/PRs drill into the in-app
+  /** Concrete issues/PRs drill into the in-app
    * detail view; non-addressable items (CI runs, releases, …) open on GitHub. */
   async function drillIn(item: InboxItem) {
-    markRead(item.issue.node_id);
+    void markRead(item.issue.node_id);
     const repo = repoFullName(item.issue);
     if (!item.addressable || !repo) {
-      await openUrl(item.issue.html_url);
+      await open(item.issue);
       return;
     }
     $appView = {
@@ -270,6 +317,9 @@
   // user can't see the effect of.
   let sentinel: HTMLElement | null = $state(null);
   const canLoadMore = $derived(
+    !$inboxLoading &&
+      !$inboxLoadingMore &&
+      !$inboxError &&
     $inboxCategoryFilters.size === 0 &&
       !$inboxUnreadOnly &&
       searchQuery.trim() === "" &&
@@ -345,6 +395,26 @@
     </div>
   {/if}
 
+  <div class="view-toolbar">
+    <span>{filtered.length} {filtered.length === 1 ? "notification" : "notifications"}</span>
+    <CardViewToggle value={$cardViews.inbox} onChange={(value) => cardViews.update((views) => ({ ...views, inbox: value }))} />
+  </div>
+
+  {#if $inboxError}
+    <div class="sync-error" role="alert">
+      <strong>Couldn’t sync your inbox</strong>
+      <span>{$inboxError}</span>
+      {#if $inbox.length > 0}
+        <span>Showing loaded notifications. {#if $inboxLastSyncAt}Last synced {new Date($inboxLastSyncAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.{/if}</span>
+      {/if}
+      {#if onRetry}<button class="ghost small" onclick={onRetry} disabled={$inboxLoading}>Try again</button>{/if}
+    </div>
+  {/if}
+  {#if actionError}
+    <div class="action-error" role="alert"><span>{actionError}</span>{#if retryAction}<button class="ghost small" onclick={() => retryAction?.()}>Retry</button>{/if}<button class="ghost small" onclick={() => { actionError = null; retryAction = null; }}>Dismiss</button></div>
+  {/if}
+  {#if mutating}<div class="action-status" role="status">Updating GitHub…</div>{/if}
+
   <!-- Bulk actions. Lives on its own row rather than in the toolbar: at the
        app's fixed 480px width the toolbar has no room left once a category
        label is showing, and it gives the confirm step somewhere to expand. -->
@@ -356,6 +426,7 @@
           class="mark-btn"
           title="Mark selected notifications as read"
           onclick={markSelectedRead}
+          disabled={mutating}
         >
           <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
             <path
@@ -376,6 +447,7 @@
             : "Mark your entire GitHub notification inbox as read"}
           onclick={markAllRead}
           onblur={disarmMarkAll}
+          disabled={mutating}
         >
           {markAllArmed ? "Click again to confirm" : markAllLabel}
         </button>
@@ -383,7 +455,11 @@
     </div>
   {/if}
 
-  {#if $inbox.length === 0}
+  {#if $inbox.length === 0 && !$inboxError && ($inboxLoading || $inboxLastSyncAt === null)}
+    <div class="empty" role="status"><div class="loader initial" aria-hidden="true"></div><div class="empty-title">Loading notifications…</div><div class="empty-body">Fetching your GitHub inbox.</div></div>
+  {:else if $inbox.length === 0 && $inboxError}
+    <div class="empty"><div class="empty-title">Inbox unavailable</div><div class="empty-body">Try again when your connection is restored.</div></div>
+  {:else if $inbox.length === 0}
     <div class="empty">
       <div class="empty-icon">✓</div>
       <div class="empty-title">Inbox zero</div>
@@ -400,9 +476,10 @@
           ? "No loaded items match your search."
           : "No items match this filter."}
       </div>
+      {#if $inboxHasMore}<button class="ghost" onclick={onLoadMore} disabled={$inboxLoadingMore}>{$inboxLoadingMore ? "Loading…" : "Load older notifications"}</button>{/if}
     </div>
   {:else}
-    <ul class="issues" data-density={$rowDensity}>
+    <ul class="issues" data-density={$rowDensity} data-card-view={$cardViews.inbox}>
       {#each filtered as item (item.issue.node_id)}
         <li
           class="issue"
@@ -428,9 +505,10 @@
           ></span>
           <div class="body">
             <div class="row1">
-              <button class="title" onclick={() => open(item.issue)}>
+              <button class="title" title={item.issue.title} onclick={() => drillIn(item)}>
                 {item.issue.title}
               </button>
+              {#if $cardViews.inbox === "short" && item.addressable}<span class="short-number">#{item.issue.number}</span>{/if}
               <span class="reason">{reasonLabel(item.reason)}</span>
               {#if item.unread}
                 <button
@@ -438,8 +516,9 @@
                   title="Mark read"
                   aria-label="Mark read"
                   onclick={() => markRead(item.issue.node_id)}
+                  disabled={pendingIds.has(item.issue.node_id)}
                 >
-                  <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                  <span class="mark-read-label">Mark read</span><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
                     <path
                       fill="currentColor"
                       d="M13.78 4.22a.75.75 0 0 1 0 1.06l-6.5 6.5a.75.75 0 0 1-1.06 0l-3-3a.75.75 0 1 1 1.06-1.06L6.75 10.19l5.97-5.97a.75.75 0 0 1 1.06 0Z"
@@ -451,12 +530,12 @@
                 class="drill"
                 title="View on GitHub"
                 aria-label="View on GitHub"
-                onclick={() => drillIn(item)}
+                onclick={() => open(item.issue)}
               >
                 <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
                   <path
                     fill="currentColor"
-                    d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"
+                    d="M4 2.5a.75.75 0 0 1 0-1.5h9a1 1 0 0 1 1 1v9a.75.75 0 0 1-1.5 0V3.56l-9.22 9.22a.75.75 0 0 1-1.06-1.06L11.44 2.5H4Z"
                   />
                 </svg>
               </button>
@@ -487,6 +566,9 @@
           </div>
         </li>
       {/each}
+      {#if filteringActive && $inboxHasMore}
+        <li class="sentinel-row"><button class="ghost" onclick={onLoadMore} disabled={$inboxLoadingMore}>{$inboxLoadingMore ? "Loading…" : "Load older notifications"}</button></li>
+      {/if}
       {#if canLoadMore}
         <li class="sentinel-row" bind:this={sentinel}>
           {#if $inboxLoadingMore}
@@ -974,5 +1056,121 @@
     to {
       transform: rotate(360deg);
     }
+  }
+  .toolbar {
+    flex-wrap: wrap;
+  }
+  .view-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 12px;
+    flex: 0 0 auto;
+  }
+  .view-toolbar > span, .action-status {
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+  .action-status {
+    padding: 6px 12px;
+  }
+  .sync-error, .action-error {
+    color: #ffb4b7;
+    background: rgba(229, 72, 77, 0.1);
+    font-size: 12px;
+    padding: 10px 12px;
+    gap: 6px;
+    flex: 0 0 auto;
+    overflow-wrap: anywhere;
+  }
+  .sync-error {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .action-error {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .action-error > span {
+    flex: 1 1 200px;
+  }
+  .small {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+  .initial {
+    width: 28px;
+    height: 28px;
+  }
+  .short-number {
+    font-size: 11px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .act {
+    opacity: 1;
+    width: auto;
+    gap: 5px;
+    padding: 3px 7px;
+    font-size: 11px;
+    border: 1px solid var(--border);
+    min-height: 26px;
+  }
+  .issue:hover .act {
+    opacity: 1;
+  }
+  .issues[data-card-view="tall"] .issue {
+    padding: 14px 16px;
+  }
+  .issues[data-card-view="tall"] .body {
+    padding-bottom: 27px;
+  }
+  .issues[data-card-view="tall"] .reason {
+    position: absolute;
+    left: 66px;
+    bottom: 15px;
+    font-size: 11px;
+    max-width: calc(100% - 180px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .issues[data-card-view="tall"] .act {
+    position: absolute;
+    right: 16px;
+    bottom: 10px;
+  }
+  .issues[data-card-view="tall"] .row2 {
+    font-size: 12px;
+    margin-top: 5px;
+  }
+  .issues[data-card-view="tall"][data-density="compact"] .issue { padding-top: 10px; padding-bottom: 10px; }
+  .issues[data-card-view="tall"][data-density="comfortable"] .issue { padding-top: 18px; padding-bottom: 18px; }
+  .issues[data-card-view="tall"][data-density="spacious"] .issue { padding-top: 22px; padding-bottom: 22px; }
+  .issues[data-card-view="short"] .issue {
+    padding: 6px 12px;
+    align-items: center;
+    gap: 6px;
+  }
+  .issues[data-card-view="short"] .row1 { min-height: 26px; gap: 6px; }
+  .issues[data-card-view="short"] .title { font-size: 13px; line-height: 1.35; }
+  .issues[data-card-view="short"] .reason,
+  .issues[data-card-view="short"] .row2,
+  .issues[data-card-view="short"] .mark-read-label { display: none; }
+  .issues[data-card-view="short"] .act { width: 26px; padding: 0; }
+  .issues[data-card-view="short"] .unread-dot { margin-top: 0; }
+  .issues[data-card-view="short"] .cb { margin-top: 0; }
+  .issue:focus-within .act, .issue:focus-within .drill, .issue:focus-within .cb { opacity: 1; }
+  .title:focus-visible, .drill:focus-visible, .act:focus-visible, .search-clear:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  @media (pointer: coarse) {
+    .issues[data-card-view="short"] .row1 { min-height: 38px; }
+    .drill, .issues[data-card-view="short"] .act { width: 36px; min-height: 38px; }
+    .cb { opacity: 1; }
   }
 </style>

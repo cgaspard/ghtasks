@@ -1,5 +1,6 @@
 <script lang="ts" generics="T extends string | number | null">
   import { onMount, tick } from "svelte";
+  import { floatingMenu } from "../floatingMenu";
 
   interface Option {
     value: T;
@@ -25,6 +26,7 @@
     disabled?: boolean;
     /** Fixed min-width in px, override per call-site. */
     minWidth?: number;
+    ariaLabel?: string;
   }
 
   let {
@@ -36,6 +38,7 @@
     searchThreshold = 10,
     disabled = false,
     minWidth = 160,
+    ariaLabel,
   }: Props = $props();
 
   let open = $state(false);
@@ -44,6 +47,7 @@
   let root: HTMLDivElement | undefined = $state();
   let menu: HTMLDivElement | undefined = $state();
   let searchInput: HTMLInputElement | undefined = $state();
+  let trigger: HTMLButtonElement | undefined = $state();
 
   const shouldSearch = $derived(
     (searchable ?? options.length >= searchThreshold) && options.length > 5,
@@ -83,18 +87,21 @@
     if (o.disabled) return;
     onChange(o.value);
     open = false;
+    trigger?.focus();
   }
 
   function onDocClick(e: MouseEvent) {
     if (!open) return;
-    if (root && !root.contains(e.target as Node)) open = false;
+    if (root && !root.contains(e.target as Node) && !menu?.contains(e.target as Node)) open = false;
   }
 
   function onKey(e: KeyboardEvent) {
     if (!open) return;
     if (e.key === "Escape") {
       e.preventDefault();
+      e.stopPropagation();
       open = false;
+      trigger?.focus();
       return;
     }
     if (e.key === "ArrowDown") {
@@ -145,10 +152,12 @@
   <button
     type="button"
     class="trigger"
+    bind:this={trigger}
     onclick={toggle}
     {disabled}
     aria-haspopup="listbox"
     aria-expanded={open}
+    aria-label={ariaLabel}
   >
     {#if selectedColor}
       <span class="swatch" style="background: {selectedColor}"></span>
@@ -160,7 +169,7 @@
   </button>
 
   {#if open}
-    <div class="menu" role="listbox" bind:this={menu}>
+    <div class="menu" role="listbox" bind:this={menu} use:floatingMenu={{ anchor: root! }}>
       {#if shouldSearch}
         <div class="search">
           <input

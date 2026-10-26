@@ -318,6 +318,7 @@ HERO_PROJECT_ITEMS.forEach((it, i) => {
 });
 
 export const HERO_PROJECT_PAGE: ProjectPageEvent = {
+  generation: 0,
   source_id: "src-proj-roadmap",
   project: HERO_PROJECT,
   fields: [HERO_STATUS, HERO_PRIORITY],

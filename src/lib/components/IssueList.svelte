@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { api, repoFullName, type Issue } from "../api";
   import LinkedBadges from "./LinkedBadges.svelte";
   import InboxBadge from "./InboxBadge.svelte";
+  import CardViewToggle from "./CardViewToggle.svelte";
   import {
     sourceResults,
     sources,
@@ -18,14 +20,21 @@
     settingsFocus,
     appView,
     rowDensity,
-    inbox,
+    seenInboxCues,
     inboxByKey,
+    cardViews,
+    recentlyCreated,
+    recentlyClosed,
+    projectResults,
   } from "../stores";
 
   let filter = $state("");
   /** node_id of the issue pending close-confirm (null = none). */
   let confirmingId: string | null = $state(null);
   let closing = $state(false);
+  let closeError: string | null = $state(null);
+  let actionError: string | null = $state(null);
+  let list: HTMLUListElement | undefined = $state();
   const myLogin = $derived($auth.user?.login ?? "");
   const repoSources = $derived(
     $sources.filter((s) => s.kind === "repo"),
@@ -90,16 +99,29 @@
   /** Opening an item marks it seen, clearing its awaiting flag. Optimistically
    * drop it from the local set so the indicator vanishes immediately. */
   function markSeen(issue: Issue) {
-    if (!$inboxByKey.has(issue.node_id)) return;
-    $inbox = $inbox.filter((a) => a.issue.node_id !== issue.node_id);
+    const notification = $inboxByKey.get(issue.node_id);
+    if (!notification) return;
+    const id = notification.issue.node_id;
+    const before = $seenInboxCues[id];
+    $seenInboxCues = { ...$seenInboxCues, [id]: notification.event_at };
     void api
-      .markInboxSeen(issue.node_id, new Date().toISOString())
-      .catch((e) => console.warn("[ghtasks] mark_inbox_seen failed:", e));
+      .markInboxSeen(notification.issue.node_id, new Date().toISOString())
+      .catch((e) => {
+        const next = { ...$seenInboxCues };
+        if (before) next[id] = before;
+        else delete next[id];
+        $seenInboxCues = next;
+        actionError = `Couldn’t update this notification: ${String(e)}`;
+      });
   }
 
   async function open(issue: Issue) {
     markSeen(issue);
-    await openUrl(issue.html_url);
+    try {
+      await openUrl(issue.html_url);
+    } catch (e) {
+      actionError = `Couldn’t open GitHub: ${String(e)}`;
+    }
   }
 
   function drillIn(issue: Issue) {
@@ -114,29 +136,61 @@
     };
   }
 
-  function askClose(issue: Issue) {
+  async function askClose(issue: Issue) {
+    if (closing) return;
+    closeError = null;
     confirmingId = confirmingId === issue.node_id ? null : issue.node_id;
+    await tick();
+    list?.querySelector<HTMLButtonElement>(".confirm .cancel-close")?.focus();
   }
-  function cancelClose() {
+  async function cancelClose() {
+    if (closing) return;
+    const id = confirmingId;
     confirmingId = null;
+    closeError = null;
+    await tick();
+    if (id) list?.querySelector<HTMLInputElement>(`[data-close-node="${CSS.escape(id)}"]`)?.focus();
   }
 
   async function confirmClose(issue: Issue) {
+    if (closing) return;
     const repo = repoFullName(issue);
-    if (!repo) return;
+    if (!repo) {
+      closeError = "This issue’s repository could not be determined. Open it on GitHub to close it.";
+      return;
+    }
     closing = true;
+    closeError = null;
     try {
-      await api.toggleIssueState(repo, issue.number, true);
+      const closedIssue = await api.toggleIssueState(repo, issue.number, true);
+      recentlyClosed.update((entries) => new Map(entries).set(issue.node_id, Date.now()));
+      recentlyCreated.update((entries) => {
+        const next = new Map(entries);
+        const entry = next.get(issue.node_id);
+        if (entry) next.set(issue.node_id, { ...entry, issue: { ...entry.issue, state: closedIssue.state, updated_at: closedIssue.updated_at }, item: entry.item ? { ...entry.item, issue: { ...entry.item.issue, state: closedIssue.state, updated_at: closedIssue.updated_at } } : undefined });
+        return next;
+      });
+      $projectResults = $projectResults.map((result) => result.snapshot ? { ...result, snapshot: { ...result.snapshot, items: result.snapshot.items.map((item) => item.issue.node_id === issue.node_id ? { ...item, issue: { ...item.issue, state: closedIssue.state, updated_at: closedIssue.updated_at } } : item) } } : result);
       // Optimistic remove from the local list.
       $sourceResults = $sourceResults.map((r) => ({
         ...r,
         issues: r.issues.filter((i) => i.node_id !== issue.node_id),
       }));
       confirmingId = null;
-    } catch {
-      // leave as-is; next refresh will reconcile.
+      await tick();
+      list?.querySelector<HTMLInputElement>("[data-close-node]")?.focus();
+    } catch (e) {
+      closeError = `Couldn’t close the issue. Try again. ${String(e)}`;
     } finally {
       closing = false;
+    }
+  }
+
+  function onKey(event: KeyboardEvent) {
+    if (event.key === "Escape" && confirmingId && !closing) {
+      event.preventDefault();
+      event.stopPropagation();
+      void cancelClose();
     }
   }
 
@@ -153,6 +207,8 @@
   }
 </script>
 
+<svelte:window onkeydown={onKey} />
+
 <div class="wrap">
   <div class="filters">
     <input
@@ -160,7 +216,7 @@
       bind:value={filter}
       aria-label="Filter issues"
     />
-    <button class="primary small" onclick={() => ($showNewIssue = true)}
+    <button class="primary small" aria-label="New issue" onclick={() => ($showNewIssue = true)}
       >+ New</button
     >
   </div>
@@ -172,11 +228,13 @@
           class="seg-btn"
           class:active={$issuesOnlyMine}
           onclick={() => ($issuesOnlyMine = true)}
-          title="Only issues assigned to me">Mine</button
+          aria-pressed={$issuesOnlyMine}
+          title="Only issues assigned to me">Assigned to me</button
         >
         <button
           class="seg-btn"
           class:active={!$issuesOnlyMine}
+          aria-pressed={!$issuesOnlyMine}
           onclick={() => ($issuesOnlyMine = false)}
           title="Show every issue returned by my sources">All</button
         >
@@ -203,6 +261,15 @@
     </div>
   {/if}
 
+  <div class="view-toolbar">
+    <span>{filtered.length} {filtered.length === 1 ? "issue" : "issues"}</span>
+    <CardViewToggle value={$cardViews.issues} onChange={(value) => cardViews.update((views) => ({ ...views, issues: value }))} />
+  </div>
+
+  {#if actionError}
+    <div class="action-error" role="alert">{actionError}<button class="ghost small" onclick={() => (actionError = null)}>Dismiss</button></div>
+  {/if}
+
   {#if sourceErrors.length > 0}
     <div class="src-errors">
       {#each sourceErrors as e}
@@ -220,15 +287,13 @@
   {:else if repoSources.length === 0}
     <div class="empty cta">
       <div class="cta-icon" aria-hidden="true">📬</div>
-      <div class="cta-title">Add your first Repository</div>
+      <div class="cta-title">Connect your first repository</div>
       <div class="cta-body">
-        The Todos tab pulls in open issues across any repo you track —
-        with your own search query (defaults to open Tasks). Great for
-        watching a repo you don't own, surfacing bugs assigned to you, or
-        keeping tabs on PRs awaiting your review.
+        Bring your open issues into Todos. Choose a repository, then follow
+        your assigned issues, bugs, or pull requests waiting for review.
       </div>
       <button class="primary cta-btn" onclick={goAddRepo}>
-        + Add a Repository
+        Connect a repository
       </button>
       <div class="cta-hint muted">
         Looking for board items with Status columns?
@@ -238,13 +303,16 @@
   {:else if filtered.length === 0}
     <div class="empty">
       {#if sourceErrors.length > 0}
-        All sources errored. Check the messages above.
+        Couldn’t load your repository issues. Check the connection errors above.
       {:else}
         No issues match this query.
+        {#if filter || $selectedSourceIds.size > 0}
+          <button class="ghost" onclick={() => { filter = ""; clearSelection(); }}>Clear filters</button>
+        {/if}
       {/if}
     </div>
   {:else}
-    <ul class="issues" data-density={$rowDensity}>
+    <ul class="issues" data-density={$rowDensity} data-card-view={$cardViews.issues} bind:this={list}>
       {#each filtered as { issue, sourceId } (issue.node_id)}
         {@const src = $sources.find((s) => s.id === sourceId)}
         {@const inboxItem = $inboxByKey.get(issue.node_id)}
@@ -261,21 +329,23 @@
           class:awaiting={awaitItem && confirmingId !== issue.node_id}
         >
           {#if confirmingId === issue.node_id}
-            <div class="confirm">
+            <div class="confirm" role="group" aria-label="Confirm closing issue">
               <div class="confirm-prompt">Close this issue?</div>
               <div class="confirm-sub">
-                #{issue.number} · {issue.title}
+                This closes {repoFullName(issue)} #{issue.number} on GitHub. Its project status stays the same.
               </div>
+              <div class="confirm-sub">{issue.title}</div>
+              {#if closeError}<div class="close-error" role="alert">{closeError}</div>{/if}
               <div class="confirm-actions">
-                <button class="ghost small" onclick={cancelClose} disabled={closing}
-                  >No</button
+                <button class="ghost small cancel-close" onclick={cancelClose} disabled={closing}
+                  >Cancel</button
                 >
                 <button
                   class="danger primary small"
                   onclick={() => confirmClose(issue)}
                   disabled={closing}
                 >
-                  {closing ? "Closing…" : "Yes, close"}
+                  {closing ? "Closing…" : "Close issue"}
                 </button>
               </div>
             </div>
@@ -284,17 +354,23 @@
               <span class="awaiting-dot" aria-hidden="true"></span>
               <span class="sr">Awaiting your response</span>
             {/if}
-            <button
+            <input
+              type="checkbox"
               class="check"
+              data-close-node={issue.node_id}
+              checked={false}
+              aria-label={`Close issue: ${issue.title}`}
               title="Close issue"
-              onclick={() => askClose(issue)}>○</button
-            >
+              onclick={(event) => { event.currentTarget.checked = false; void askClose(issue); }}
+            />
             <div class="body">
               <div class="row1">
                 {#if awaitItem}<InboxBadge category={awaitItem.category} />{/if}
-                <button class="title" onclick={() => open(issue)}>
+                <button class="title" title={issue.title} onclick={() => drillIn(issue)}>
                   {issue.title}
                 </button>
+                {#if $cardViews.issues === "short"}<span class="short-number">#{issue.number}</span>{/if}
+                <button class="github" aria-label={`Open ${issue.title} on GitHub`} title="Open on GitHub" onclick={() => open(issue)}>↗</button>
                 <button
                   class="drill"
                   title="View issue"
@@ -608,21 +684,6 @@
     font-size: 11px;
     padding: 4px 10px;
   }
-  .check {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    padding: 0;
-    font-size: 13px;
-    color: var(--text-dim);
-    background: transparent;
-    flex: 0 0 auto;
-    margin-top: -1px;
-  }
-  .check:hover {
-    color: var(--ok);
-    border-color: var(--ok);
-  }
   .drill {
     all: unset;
     cursor: pointer;
@@ -805,5 +866,111 @@
     font-size: 11px;
     color: #ffb4b7;
     line-height: 1.4;
+  }
+  .view-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0 12px 10px;
+    flex: 0 0 auto;
+  }
+  .view-toolbar > span {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .check {
+    width: 17px;
+    height: 17px;
+    margin: 4px 2px 0 0;
+    padding: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .github {
+    border: 0;
+    background: transparent;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    flex-shrink: 0;
+    color: var(--text-dim);
+  }
+  .github:hover {
+    color: var(--text);
+    background: var(--bg-hover);
+  }
+  .short-number {
+    font-size: 11px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .action-error, .close-error {
+    color: #ffb4b7;
+    background: rgba(229, 72, 77, 0.1);
+    padding: 9px 12px;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+  .action-error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex: 0 0 auto;
+  }
+  .close-error {
+    border-radius: 6px;
+  }
+  .issues[data-card-view="tall"] .issue {
+    padding: 14px 16px;
+    gap: 12px;
+  }
+  .issues[data-card-view="tall"][data-density="compact"] .issue {
+    padding: 10px 14px;
+  }
+  .issues[data-card-view="tall"][data-density="comfortable"] .issue {
+    padding: 18px 16px;
+  }
+  .issues[data-card-view="tall"][data-density="spacious"] .issue {
+    padding: 22px 18px;
+  }
+  .issues[data-card-view="short"] .issue {
+    padding: 6px 12px;
+    align-items: center;
+  }
+  .issues[data-card-view="short"] .row2,
+  .issues[data-card-view="short"] .row3 {
+    display: none;
+  }
+  .issues[data-card-view="short"] .row1 {
+    min-height: 26px;
+    gap: 6px;
+  }
+  .issues[data-card-view="short"] .title {
+    font-size: 13px;
+    line-height: 1.35;
+  }
+  .issues[data-card-view="short"] .check {
+    margin-top: 0;
+  }
+  .issues[data-card-view="short"] :global(.await-badge .lbl) {
+    display: none;
+  }
+  .issues[data-card-view] .issue.confirming {
+    padding: 12px 16px;
+  }
+  .title:focus-visible, .drill:focus-visible, .seg-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .issue:focus-within .drill {
+    opacity: 1;
+  }
+  @media (pointer: coarse) {
+    .issues[data-card-view="short"] .row1 { min-height: 38px; }
+    .github, .drill { width: 36px; height: 38px; }
   }
 </style>

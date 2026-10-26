@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import {
     api,
@@ -24,14 +25,16 @@
     settingsFocus,
     appView,
     rowDensity,
-    inbox,
+    seenInboxCues,
     inboxByKey,
+    cardViews,
   } from "../stores";
   import FilterPicker from "./FilterPicker.svelte";
   import StatusPicker from "./StatusPicker.svelte";
   import Select from "./Select.svelte";
   import LinkedBadges from "./LinkedBadges.svelte";
   import InboxBadge from "./InboxBadge.svelte";
+  import CardViewToggle from "./CardViewToggle.svelte";
   import { statusColor } from "../statusColor";
 
   const NO_STATUS = "__none__";
@@ -39,6 +42,8 @@
   let filter = $state("");
   let commentingId: string | null = $state(null);
   let commentText = $state("");
+  let commentSubmitting = $state(false);
+  let collapsedGroups = $state(new Set<string>());
 
   const myLogin = $derived($auth.user?.login ?? "");
 
@@ -94,7 +99,7 @@
             item,
             statusField: status,
             statusValue: sv?.option_id ?? null,
-            statusName: sv?.text ?? null,
+            statusName: opt?.name ?? sv?.text ?? (sv?.option_id ? "Unknown status" : null),
             statusColor: opt?.color ?? null,
             statusIndex: idx < 0 ? Number.POSITIVE_INFINITY : idx,
           });
@@ -116,6 +121,60 @@
       return out;
     })(),
   );
+
+  const shortGroups = $derived.by(() => {
+    const groups = new Map<string, {
+      key: string;
+      name: string;
+      color: string | null;
+      projectName: string;
+      sourceIndex: number;
+      statusIndex: number;
+      items: typeof filtered;
+    }>();
+    for (const row of filtered) {
+      const key = `${row.sourceId}:${row.statusValue ?? NO_STATUS}`;
+      let group = groups.get(key);
+      if (!group) {
+        group = {
+          key,
+          name: row.statusName ?? "No Status",
+          color: row.statusColor,
+          projectName: projectSources.find((source) => source.id === row.sourceId)?.name
+            ?? snapshotById.get(row.sourceId)?.project.title ?? "Project",
+          sourceIndex: activeResults.findIndex((result) => result.source_id === row.sourceId),
+          statusIndex: row.statusIndex,
+          items: [],
+        };
+        groups.set(key, group);
+      }
+      group.items.push(row);
+    }
+    return [...groups.values()].sort((a, b) => {
+      if (a.sourceIndex !== b.sourceIndex) return a.sourceIndex - b.sourceIndex;
+      if (a.statusIndex !== b.statusIndex) return a.statusIndex - b.statusIndex;
+      if (a.name === "No Status" && b.name !== "No Status") return 1;
+      if (b.name === "No Status" && a.name !== "No Status") return -1;
+      return 0;
+    });
+  });
+
+  const multipleGroupedProjects = $derived.by(() => new Set(filtered.map((row) => row.sourceId)).size > 1);
+
+  function toggleGroup(key: string) {
+    const next = new Set(collapsedGroups);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    collapsedGroups = next;
+  }
+
+  async function focusShortStatus(itemId: string) {
+    if ($cardViews.projects !== "short") return;
+    await tick();
+    document.querySelector<HTMLButtonElement>(
+      `[data-project-item="${CSS.escape(itemId)}"] .short-status button`,
+    )?.focus();
+  }
 
   /** Unique status option labels across selected projects (plus "No Status"). */
   const statusChips = $derived(
@@ -321,11 +380,20 @@
    * its awaiting flag until a newer event arrives. Optimistically drop it from
    * the local awaiting set so the indicator vanishes immediately. */
   function markSeen(issue: Issue) {
-    if (!$inboxByKey.has(issue.node_id)) return;
-    $inbox = $inbox.filter((a) => a.issue.node_id !== issue.node_id);
+    const notification = $inboxByKey.get(issue.node_id);
+    if (!notification) return;
+    const notificationId = notification.issue.node_id;
+    const before = $seenInboxCues[notificationId];
+    $seenInboxCues = { ...$seenInboxCues, [notificationId]: notification.event_at };
     void api
-      .markInboxSeen(issue.node_id, new Date().toISOString())
-      .catch((e) => console.warn("[ghtasks] mark_inbox_seen failed:", e));
+      .markInboxSeen(notificationId, new Date().toISOString())
+      .catch((e) => {
+        const next = { ...$seenInboxCues };
+        if (before) next[notificationId] = before;
+        else delete next[notificationId];
+        $seenInboxCues = next;
+        $lastError = `Couldn’t update the notification: ${String(e)}`;
+      });
   }
 
   async function open(issue: Issue) {
@@ -375,7 +443,12 @@
       });
     }
     item.field_values = newValues;
+    const destinationKey = `${sourceId}:${optionId ?? NO_STATUS}`;
+    if (collapsedGroups.has(destinationKey)) {
+      collapsedGroups = new Set([...collapsedGroups].filter((key) => key !== destinationKey));
+    }
     $projectResults = [...$projectResults]; // trigger reactivity
+    void focusShortStatus(item.item_id);
 
     try {
       await api.setProjectItemStatus(
@@ -388,18 +461,22 @@
       item.field_values = prev;
       $projectResults = [...$projectResults];
       $lastError = String(e);
+      void focusShortStatus(item.item_id);
     }
   }
 
   async function submitComment(item: ProjectItem) {
     const body = commentText.trim();
-    if (!body) return;
+    if (!body || commentSubmitting) return;
+    commentSubmitting = true;
     try {
       await api.addIssueComment(item.repo, item.issue.number, body);
       commentText = "";
       commentingId = null;
     } catch (e) {
       $lastError = String(e);
+    } finally {
+      commentSubmitting = false;
     }
   }
 
@@ -535,6 +612,18 @@
     </div>
   {/if}
 
+  {#if projectSources.length > 0}
+    <div class="view-row">
+      <span class="result-count" role="status" aria-live="polite">
+        {filtered.length} {filtered.length === 1 ? "issue" : "issues"}{#if $cardViews.projects === "short"} · Grouped by status{/if}
+      </span>
+      <CardViewToggle
+        value={$cardViews.projects}
+        onChange={(value) => cardViews.update((views) => ({ ...views, projects: value }))}
+      />
+    </div>
+  {/if}
+
   {#if sourceErrors.length > 0}
     <div class="src-errors">
       {#each sourceErrors as e}
@@ -581,6 +670,74 @@
       {:else}
         No items match.
       {/if}
+    </div>
+  {:else if $cardViews.projects === "short"}
+    <div class="short-groups" data-card-view="short">
+      {#each shortGroups as group, index (group.key)}
+        {@const c = statusColor(group.color)}
+        <section
+          class="status-group"
+          style="--status-solid: {c.solid};"
+          aria-label={multipleGroupedProjects ? `${group.projectName}: ${group.name}` : group.name}
+          data-status={group.name}
+        >
+          <button
+            type="button"
+            class="group-heading"
+            aria-expanded={!collapsedGroups.has(group.key)}
+            aria-controls={`project-status-group-${index}`}
+            onclick={() => toggleGroup(group.key)}
+          >
+            <span class="group-dot" aria-hidden="true"></span>
+            <span class="group-name">{group.name}</span>
+            {#if multipleGroupedProjects}<span class="group-project">{group.projectName}</span>{/if}
+            <span class="group-count">{group.items.length}</span>
+            <span class="group-chevron" aria-hidden="true">{collapsedGroups.has(group.key) ? "▸" : "▾"}</span>
+          </button>
+          <ul
+            id={`project-status-group-${index}`}
+            class="short-items"
+            hidden={collapsedGroups.has(group.key)}
+          >
+            {#each group.items as { sourceId, item, statusField, statusValue, statusName, statusColor: statusColorRaw } (item.item_id)}
+              {@const rowColor = statusColor(statusColorRaw)}
+              <li
+                class="short-issue"
+                data-project-item={item.item_id}
+                style="--status-solid: {rowColor.solid};"
+              >
+                <button
+                  type="button"
+                  class="short-title"
+                  title={`${item.issue.title} — ${item.repo} #${item.issue.number}`}
+                  onclick={() => open(item.issue)}
+                >{item.issue.title}</button>
+                <span class="short-number">#{item.issue.number}</span>
+                {#if statusField}
+                  <div class="short-status">
+                    <StatusPicker
+                      variant="tag"
+                      ariaLabel={`Change status for ${item.issue.title}`}
+                      value={statusValue}
+                      valueName={statusName}
+                      valueColor={statusColorRaw}
+                      options={statusField.options.map((option) => ({ id: option.id, name: option.name, color: option.color }))}
+                      onPick={(optionId) => changeStatus(sourceId, item, statusField, optionId)}
+                    />
+                  </div>
+                {/if}
+                <button
+                  type="button"
+                  class="short-detail"
+                  aria-label={`View issue: ${item.issue.title}`}
+                  title="View issue"
+                  onclick={() => drillIn(item)}
+                >›</button>
+              </li>
+            {/each}
+          </ul>
+        </section>
+      {/each}
     </div>
   {:else}
     <ul class="issues" data-density={$rowDensity}>
@@ -707,7 +864,7 @@
                 <button
                   class="primary small"
                   onclick={() => submitComment(item)}
-                  disabled={!commentText.trim()}>Comment</button
+                  disabled={!commentText.trim() || commentSubmitting}>{commentSubmitting ? "Posting…" : "Comment"}</button
                 >
               </div>
             </div>
@@ -724,6 +881,129 @@
     flex-direction: column;
     height: 100%;
     min-height: 0;
+  }
+  .view-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 10px 8px;
+    border-bottom: 1px solid var(--border);
+    flex: 0 0 auto;
+  }
+  .result-count {
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+  .short-groups {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+  }
+  .status-group {
+    border-bottom: 1px solid var(--border);
+  }
+  .group-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 34px;
+    padding: 7px 12px;
+    border: none;
+    border-radius: 0;
+    background: var(--bg-elev);
+    color: var(--status-solid);
+    text-align: left;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .group-heading:hover { background: var(--bg-hover); }
+  .group-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--status-solid);
+    flex: 0 0 auto;
+  }
+  .group-name { white-space: nowrap; }
+  .group-count, .group-project {
+    color: var(--text-dim);
+    font-size: 11px;
+    font-weight: 400;
+  }
+  .group-project {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .group-chevron {
+    margin-left: auto;
+    color: var(--text-dim);
+  }
+  .short-items { list-style: none; margin: 0; padding: 0; }
+  .short-issue {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 10px;
+    min-height: 38px;
+    border-left: 2px solid var(--status-solid);
+    border-bottom: 1px solid var(--border);
+  }
+  .short-issue:last-child { border-bottom: 0; }
+  .short-issue:hover { background: var(--bg-elev); }
+  .short-title {
+    all: unset;
+    cursor: pointer;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    line-height: 1.4;
+    padding: 4px 0;
+  }
+  .short-title:hover { color: var(--accent); }
+  .short-number {
+    color: var(--text-dim);
+    font-size: 11px;
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+  .short-status { flex: 0 0 auto; }
+  .short-status :global(.tag-label) { display: none; }
+  .short-status :global(.tag) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    min-height: 26px;
+    border: 1px solid color-mix(in srgb, var(--status-solid) 35%, var(--border));
+    background: color-mix(in srgb, var(--status-solid) 8%, var(--bg));
+    border-radius: 5px;
+  }
+  .short-status :global(.caret) { font-size: 13px; }
+  .short-detail {
+    border: none;
+    background: transparent;
+    padding: 0;
+    width: 24px;
+    min-height: 26px;
+    flex: 0 0 auto;
+    color: var(--text-dim);
+    font-size: 20px;
+    line-height: 1;
+  }
+  .short-title:focus-visible, .short-detail:focus-visible, .group-heading:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  @media (pointer: coarse) {
+    .short-title, .short-detail, .group-heading { min-height: 44px; }
+    .short-status :global(.tag) { min-width: 44px; min-height: 44px; }
   }
   .filters {
     display: flex;
@@ -1121,6 +1401,11 @@
   }
   .issue:hover .tray {
     opacity: 1;
+  }
+  .issue:focus-within .tray { opacity: 1; }
+  .title:focus-visible, .tray-btn:focus-visible, .milestone:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
   .tray-btn {
     all: unset;

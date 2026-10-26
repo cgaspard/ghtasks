@@ -1,35 +1,38 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { api } from "../api";
   import {
     activeTab,
     auth,
-    loading,
     showNewIssue,
-    lastSyncAt,
-    newSinceLastSync,
     appVersion,
     appView,
     updateAvailable,
     unreadCount,
+    settingsSection,
+    lastError,
   } from "../stores";
-
-  interface Props {
-    onRefresh: () => Promise<void> | void;
-  }
-  let { onRefresh }: Props = $props();
 
   async function quit() {
     await api.quit();
   }
   async function logout() {
     menuOpen = false;
-    await api.authLogout();
-    $auth = { authenticated: false, user: null };
+    try {
+      await api.authLogout();
+      $auth = { authenticated: false, user: null };
+    } catch (e) {
+      lastError.set(String(e));
+    }
+  }
+  function navigate(tab: "projects" | "issues" | "inbox" | "settings") {
+    $appView = { kind: "list" };
+    $activeTab = tab;
+    if (tab === "settings") $settingsSection = "home";
   }
   function openSettings() {
     menuOpen = false;
-    $activeTab = "settings";
+    navigate("settings");
   }
   async function openDevtools() {
     menuOpen = false;
@@ -40,14 +43,17 @@
     $appView = { kind: "about" };
   }
 
-  // Tick the "synced Xm ago" label every 20s so it stays fresh without
-  // reading Date.now() in the template.
-  let now = $state(Date.now());
-  let tickHandle: ReturnType<typeof setInterval> | null = null;
-
   // Avatar popover open state.
   let menuOpen = $state(false);
   let menuRoot: HTMLDivElement | undefined = $state();
+  let avatarButton: HTMLButtonElement | undefined = $state();
+  async function toggleMenu() {
+    menuOpen = !menuOpen;
+    if (menuOpen) {
+      await tick();
+      menuRoot?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    }
+  }
 
   function onDocClick(e: MouseEvent) {
     if (!menuOpen) return;
@@ -56,58 +62,51 @@
   function onKey(e: KeyboardEvent) {
     if (e.key === "Escape" && menuOpen) {
       menuOpen = false;
+      avatarButton?.focus();
+      return;
+    }
+    if (menuOpen && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      e.preventDefault();
+      const items = [...(menuRoot?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
+      const index = items.indexOf(document.activeElement as HTMLButtonElement);
+      items[(index + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
       return;
     }
     // ⌘, / Ctrl+, → Settings
-    if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+    if ((e.metaKey || e.ctrlKey) && e.key === "," && !$showNewIssue) {
       e.preventDefault();
-      $activeTab = "settings";
+      openSettings();
     }
   }
 
   onMount(() => {
-    tickHandle = setInterval(() => (now = Date.now()), 20_000);
     document.addEventListener("click", onDocClick);
     document.addEventListener("keydown", onKey);
     return () => {
-      if (tickHandle) clearInterval(tickHandle);
       document.removeEventListener("click", onDocClick);
       document.removeEventListener("keydown", onKey);
     };
   });
 
-  const agoLabel = $derived.by(() => {
-    if (!$lastSyncAt) return "";
-    const diff = Math.max(0, now - $lastSyncAt);
-    const s = Math.round(diff / 1000);
-    if (s < 10) return "synced just now";
-    if (s < 60) return `synced ${s}s ago`;
-    const m = Math.round(s / 60);
-    if (m < 60) return `synced ${m}m ago`;
-    const h = Math.round(m / 60);
-    return `synced ${h}h ago`;
-  });
-
-  async function handleRefresh() {
-    $newSinceLastSync = 0;
-    await onRefresh();
-  }
 </script>
 
 <header class="bar" data-tauri-drag-region>
-  <nav class="tabs">
+  <nav class="tabs" aria-label="Main navigation">
     <button
-      class:active={$activeTab === "projects"}
-      onclick={() => ($activeTab = "projects")}>Projects</button
+      class:active={$activeTab === "projects" && $appView.kind === "list"}
+      aria-pressed={$activeTab === "projects" && $appView.kind === "list"}
+      onclick={() => navigate("projects")}>Projects</button
     >
     <button
-      class:active={$activeTab === "issues"}
-      onclick={() => ($activeTab = "issues")}>Todos</button
+      class:active={$activeTab === "issues" && $appView.kind === "list"}
+      aria-pressed={$activeTab === "issues" && $appView.kind === "list"}
+      onclick={() => navigate("issues")}>Todos</button
     >
     <button
       class="await-tab"
-      class:active={$activeTab === "inbox"}
-      onclick={() => ($activeTab = "inbox")}
+      class:active={$activeTab === "inbox" && $appView.kind === "list"}
+      aria-pressed={$activeTab === "inbox" && $appView.kind === "list"}
+      onclick={() => navigate("inbox")}
     >
       Inbox
       {#if $unreadCount > 0}
@@ -116,39 +115,16 @@
     </button>
   </nav>
   <div class="right">
-    {#if agoLabel}
-      <span class="sync-label" title={agoLabel}>{agoLabel}</span>
-    {/if}
-    <button
-      class="ghost icon"
-      onclick={() => ($showNewIssue = true)}
-      title="New issue"
-      aria-label="New issue">+</button
-    >
-    <button
-      class="ghost icon refresh"
-      class:spinning={$loading}
-      onclick={handleRefresh}
-      disabled={$loading}
-      title={$loading
-        ? "Refreshing…"
-        : $newSinceLastSync > 0
-          ? `${$newSinceLastSync} new since last view — click to refresh`
-          : "Refresh"}
-      aria-label="Refresh"
-    >
-      <span class="spin-wrap" aria-hidden="true">↻</span>
-      {#if $newSinceLastSync > 0 && !$loading}
-        <span class="new-badge" aria-label="New items">{$newSinceLastSync}</span>
-      {/if}
+    <button class="ghost icon settings-button" class:active={$activeTab === "settings" && $appView.kind === "list"} onclick={openSettings} title="Settings" aria-label="Settings" aria-pressed={$activeTab === "settings" && $appView.kind === "list"}>
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m9 3-1 3-3 1v4l2 2-1 3 3 2 3-1 3 1 3-2-1-3 2-2V7l-3-1-1-3Z"/><circle cx="12" cy="10.5" r="3"/></svg>
     </button>
-
     {#if $auth.user}
       <div class="menu-anchor" bind:this={menuRoot}>
         <button
           class="avatar-btn"
           class:active={menuOpen}
-          onclick={() => (menuOpen = !menuOpen)}
+          onclick={toggleMenu}
+          bind:this={avatarButton}
           title={$auth.user.login}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
@@ -266,9 +242,11 @@
 <style>
   .bar {
     display: flex;
+    flex-shrink: 0;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 10px;
+    gap: 8px;
+    padding: 9px 12px;
     border-bottom: 1px solid var(--border);
     background: var(--bg-elev);
   }
@@ -280,7 +258,7 @@
     background: transparent;
     border: none;
     color: var(--text-dim);
-    padding: 4px 8px;
+    padding: 6px 9px;
     font-weight: 500;
     border-radius: 6px;
   }
@@ -288,7 +266,7 @@
     background: var(--bg-hover);
     color: var(--text);
   }
-  .tabs button.active {
+  .tabs button.active, .settings-button.active {
     color: var(--text);
     background: var(--bg-hover);
   }
@@ -462,7 +440,7 @@
   }
   .icon {
     width: 28px;
-    height: 24px;
+    height: 28px;
     padding: 0;
     text-align: center;
     position: relative;
@@ -474,46 +452,8 @@
   .icon:hover {
     color: var(--text);
   }
-  .sync-label {
-    font-size: 10px;
-    color: var(--text-dim);
-    padding-right: 2px;
-    white-space: nowrap;
-  }
-  .new-badge {
-    position: absolute;
-    top: -2px;
-    right: -2px;
-    min-width: 14px;
-    height: 14px;
-    padding: 0 3px;
-    border-radius: 7px;
-    background: var(--accent);
-    color: white;
-    font-size: 9px;
-    font-weight: 600;
-    line-height: 14px;
-    text-align: center;
-    box-shadow: 0 0 0 2px var(--bg-elev);
-  }
-  .refresh:disabled {
-    opacity: 1;
-    cursor: default;
-  }
-  .spin-wrap {
-    display: inline-block;
-    line-height: 1;
-  }
-  .spinning .spin-wrap {
-    animation: spin 0.9s linear infinite;
-    color: var(--accent);
-  }
-  @keyframes spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
+  @media (max-width: 380px) {
+    .bar { padding-inline: 10px; gap: 4px; }
+    .tabs button { padding-inline: 8px; font-size: 12px; }
   }
 </style>

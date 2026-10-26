@@ -130,6 +130,24 @@ export const projectsOnlyMine = persistent<boolean>(
 export const issuesOnlyMine = persistent<boolean>("issuesOnlyMine", true);
 
 export const loading = writable(false);
+export const pollIntervalSecs = writable(90);
+
+export type CardView = "short" | "tall";
+export const cardViews = persistent<Record<"projects" | "issues" | "inbox", CardView>>(
+  "cardViews",
+  { projects: "tall", issues: "tall", inbox: "tall" },
+  {
+    serialize: JSON.stringify,
+    deserialize: (raw) => {
+      const value = JSON.parse(raw);
+      return {
+        projects: value?.projects === "short" ? "short" : "tall",
+        issues: value?.issues === "short" ? "short" : "tall",
+        inbox: value?.inbox === "short" ? "short" : "tall",
+      };
+    },
+  },
+);
 
 /** Timestamp (ms) of the last successful sync, or null before first sync. */
 export const lastSyncAt = writable<number | null>(null);
@@ -158,11 +176,13 @@ export type RecentlyCreatedEntry = {
 export const recentlyCreated = writable<Map<string, RecentlyCreatedEntry>>(
   new Map(),
 );
+export const recentlyClosed = writable<Map<string, number>>(new Map());
 const RECENT_TTL_MS = 120_000;
 
 /** Drop expired entries in place. Call before reading. */
 export function pruneRecentlyCreated() {
   const now = Date.now();
+  recentlyClosed.update((entries) => new Map([...entries].filter(([, closedAt]) => now - closedAt <= RECENT_TTL_MS)));
   recentlyCreated.update((m) => {
     const next = new Map(m);
     for (const [k, v] of next) {
@@ -189,11 +209,12 @@ export const activeTab = persistent<
 
 /** When true, the New Issue modal is open. */
 export const showNewIssue = writable(false);
+export const createdIssueNotice = writable<{ repo: string; issue: Issue } | null>(null);
 
-/** Which Settings accordion section is expanded (one at a time). Persisted. */
-export const settingsSection = persistent<"general" | "sources">(
+export type SettingsSection = "home" | "sources" | "appearance" | "notifications" | "general" | "updates";
+export const settingsSection = persistent<SettingsSection>(
   "settingsSection",
-  "general",
+  "home",
 );
 
 /** Row density for the issue/project lists. Persisted so the next cold launch
@@ -206,6 +227,7 @@ export const rowDensity = persistent<RowDensity>("rowDensity", "default");
  * Holds page 1 (replaced on every refresh) plus any older pages appended via
  * infinite scroll. */
 export const inbox = persistent<InboxItem[]>("inbox", []);
+export const seenInboxCues = persistent<Record<string, string>>("seenInboxCues", {});
 
 /** Whether GitHub has more inbox pages beyond what's currently loaded — drives
  * the infinite-scroll sentinel in InboxList. Not persisted: recomputed by the
@@ -214,6 +236,9 @@ export const inboxHasMore = writable(true);
 
 /** True while a "load more" (page 2+) fetch is in flight. Transient. */
 export const inboxLoadingMore = writable(false);
+export const inboxLoading = writable(false);
+export const inboxError = writable<string | null>(null);
+export const inboxLastSyncAt = writable<number | null>(null);
 
 /** Highest inbox page fetched so far (1 = only the live refresh page). */
 export const inboxPage = writable(1);
@@ -238,11 +263,29 @@ export const unreadCount = derived(
 
 /** node_id → item, for O(1) lookup when rendering the inline indicator on the
  * Projects/Issues lists (needs-response items only). */
-export const inboxByKey = derived(inbox, ($i) => {
-  const m = new Map<string, InboxItem>();
-  for (const item of $i) m.set(item.issue.node_id, item);
-  return m;
-});
+export const inboxByKey = derived(
+  [inbox, sourceResults, projectResults, seenInboxCues],
+  ([$inbox, $sources, $projects, $seen]) => {
+    const index = new Map<string, InboxItem>();
+    const byUrl = new Map<string, InboxItem>();
+    const key = (url: string) => url.replace(/\/$/, "").toLowerCase();
+    for (const item of $inbox) {
+      if (!item.unread || $seen[item.issue.node_id] === item.event_at) continue;
+      index.set(item.issue.node_id, item);
+      const url = key(item.issue.html_url);
+      if (!byUrl.has(url) || item.unread) byUrl.set(url, item);
+    }
+    const issues = [
+      ...$sources.flatMap((source) => source.issues),
+      ...$projects.flatMap((project) => project.snapshot?.items.map((item) => item.issue) ?? []),
+    ];
+    for (const issue of issues) {
+      const notification = byUrl.get(key(issue.html_url));
+      if (notification) index.set(issue.node_id, notification);
+    }
+    return index;
+  },
+);
 
 /** Transient (not persisted) pointer for deep-links from list CTAs. When
  * non-null, the Sources editor auto-opens the matching new-source form on

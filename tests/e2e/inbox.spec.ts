@@ -12,9 +12,9 @@ import { INBOX_PAGE_2 } from "./fixtures/mockData";
  * The popover stays open after a click (multi-select), so this can be chained. */
 async function pickCategory(page: Page, label: string) {
   const trigger = page.locator(".filter .trigger");
-  const menu = page.locator(".filter .menu");
+  const menu = page.getByRole("dialog", { name: "Category filters" });
   if (!(await menu.isVisible())) await trigger.click();
-  await page.locator(".filter .opt", { hasText: label }).click();
+  await menu.locator(".opt", { hasText: label }).click();
 }
 
 /** Flip the "Unread only" toggle. */
@@ -25,7 +25,7 @@ async function toggleUnreadOnly(page: Page) {
 /** Close the Category popover. It only dismisses on outside click, and while
  * open it covers the rows and the bulk bar. */
 async function closeCategoryMenu(page: Page) {
-  const menu = page.locator(".filter .menu");
+  const menu = page.getByRole("dialog", { name: "Category filters" });
   if (await menu.isVisible()) await page.locator(".filter .trigger").click();
   await expect(menu).toBeHidden();
 }
@@ -139,7 +139,7 @@ test.describe("inbox", () => {
 
     await page.locator(".filter .trigger").click();
     // Per-option counts render.
-    await expect(page.locator(".filter .opt-count").first()).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Category filters" }).locator(".opt-count").first()).toBeVisible();
 
     // Check two categories — both their items show (OR), not one XOR the other.
     await pickCategory(page, "Review requested");
@@ -280,13 +280,10 @@ test.describe("inbox", () => {
     mountApp,
     page,
   }) => {
-    // In this headless viewport the short fixture list already fits on
-    // screen, so the sentinel intersects (and page 2 loads) as soon as the
-    // tab mounts — the same "load more" path a real scroll would trigger,
-    // just without needing to scroll. Assert on the outcome (item appended,
-    // page-2 fetch happened) rather than a pre-load absence that's racy here.
     await mountApp({ inboxHasMore: true, inboxPages: [INBOX_PAGE_2] });
     await page.getByRole("button", { name: /Inbox/ }).click();
+    await page.locator("ul.issues").evaluate((list) => { list.scrollTop = list.scrollHeight; });
+    await page.getByText("Archive the legacy webhook handler").scrollIntoViewIfNeeded();
 
     await expect(
       page.getByText("Archive the legacy webhook handler"),
@@ -309,6 +306,8 @@ test.describe("inbox", () => {
   }) => {
     await mountApp({ inboxHasMore: true, inboxPages: [INBOX_PAGE_2] });
     await page.getByRole("button", { name: /Inbox/ }).click();
+    await page.locator("ul.issues").evaluate((list) => { list.scrollTop = list.scrollHeight; });
+    await page.getByText("Archive the legacy webhook handler").scrollIntoViewIfNeeded();
     await expect(
       page.getByText("Archive the legacy webhook handler"),
     ).toBeVisible();

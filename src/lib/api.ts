@@ -163,6 +163,7 @@ export interface ProjectFetchResult {
 }
 
 export interface ProjectPageEvent {
+  generation: number;
   source_id: string;
   project: ProjectSummary;
   fields: ProjectField[];
@@ -386,8 +387,8 @@ export const api = {
   listProjects: () => invoke<ProjectSummary[]>("list_projects"),
   fetchAllProjects: () =>
     invoke<ProjectFetchResult[]>("fetch_all_projects"),
-  fetchAllProjectsStreaming: () =>
-    invoke<void>("fetch_all_projects_streaming"),
+  fetchAllProjectsStreaming: (generation: number) =>
+    invoke<void>("fetch_all_projects_streaming", { generation }),
   setProjectItemStatus: (
     project_id: string,
     item_id: string,

@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
+  import { get } from "svelte/store";
   import {
     api,
     type Issue,
@@ -11,7 +12,7 @@
   } from "../api";
   import {
     auth,
-    lastError,
+    createdIssueNotice,
     projectResults,
     recordRecentlyCreated,
     showNewIssue,
@@ -29,24 +30,32 @@
   import StatusPicker from "./StatusPicker.svelte";
   import Select from "./Select.svelte";
   import IssueTemplateForm from "./IssueTemplateForm.svelte";
+  import { clearNewIssueDraft, newIssueDraft, type NewIssueDraft } from "../newIssueDraft";
 
   interface Props {
     onCreated: () => Promise<void> | void;
   }
   let { onCreated }: Props = $props();
 
-  type Target = "project" | "repo";
-
-  let target: Target = $state("project");
-  let repo = $state("");
-  let projectSourceId = $state("");
-  let title = $state("");
-  let body = $state("");
-  let selectedLabels = $state<Set<string>>(new Set());
-  let issueType = $state("Task");
-  let assignToMe = $state(true);
-  let statusOptionId = $state<string>("");
+  const initialDraft = get(newIssueDraft);
+  const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  let keepDraft = true;
+  let disposed = false;
+  let repo = $state(initialDraft?.repo ?? "");
+  let projectSourceId = $state(initialDraft?.projectSourceId ?? "");
+  let title = $state(initialDraft?.title ?? "");
+  let body = $state(initialDraft?.body ?? "");
+  let selectedLabels = $state<Set<string>>(new Set(initialDraft?.selectedLabels ?? []));
+  let issueType = $state(initialDraft?.issueType ?? "Task");
+  let assignToMe = $state(initialDraft?.assignToMe ?? true);
+  let statusOptionId = $state<string | null>(initialDraft?.statusOptionId ?? null);
   let submitting = $state(false);
+  let formErrors: string[] = $state([]);
+  let repoError = $state("");
+  let labelsError = $state("");
+  let templatesError = $state("");
+  let modal: HTMLDivElement;
+  let titleInput: HTMLInputElement;
 
   const myLogin = $derived($auth.user?.login ?? "");
 
@@ -83,12 +92,12 @@
   const templatesByRepo = new Map<string, IssueTemplateSet>();
 
   /** Selected template's filename, or "" for the blank default. */
-  let templateKey = $state("");
-  let formValues: FormValues = $state({});
+  let templateKey = $state(initialDraft?.templateKey ?? "");
+  let formValues: FormValues = $state(initialDraft?.formValues ?? {});
   /** Track whether the user has hand-edited body/title so we don't
    * clobber their in-progress input when switching templates. */
-  let titleTouched = $state(false);
-  let bodyTouched = $state(false);
+  let titleTouched = $state(initialDraft?.titleTouched ?? false);
+  let bodyTouched = $state(initialDraft?.bodyTouched ?? false);
 
   const activeTemplate = $derived<IssueTemplate | null>(
     templates.find((t) => t.filename === templateKey) ?? null,
@@ -98,38 +107,55 @@
     $sources.filter((s) => s.kind === "project" && s.enabled),
   );
 
+  const missingTemplate = $derived(!loadingTemplates && !!templateKey && !activeTemplate);
+  const templateAssignees = $derived(resolveAssignees(activeTemplate?.assignees ?? [], myLogin || null).filter((login) => login !== myLogin));
+
+  function snapshotDraft(): NewIssueDraft {
+    return { repo, projectSourceId, title, body, selectedLabels: [...selectedLabels], issueType, assignToMe, statusOptionId, templateKey, formValues: $state.snapshot(formValues), titleTouched, bodyTouched };
+  }
+
+  $effect(() => {
+    const draft = snapshotDraft();
+    if (keepDraft) newIssueDraft.set(draft);
+  });
+
+  onMount(() => {
+    void loadRepos();
+    void tick().then(() => titleInput?.focus());
+    return () => {
+      disposed = true;
+      keepDraft = false;
+      requestAnimationFrame(() => {
+        if (opener?.isConnected) opener.focus();
+      });
+    };
+  });
+
   async function loadRepos() {
-    if (repos.length > 0 || loadingRepos) return;
+    if (loadingRepos) return;
     loadingRepos = true;
+    repoError = "";
     try {
       repos = await api.listRepos();
       const defaults = await api.getSettings();
-      if (!repo && defaults.default_repo) repo = defaults.default_repo;
+      if (!disposed && !repo && defaults.default_repo) repo = defaults.default_repo;
     } catch (e) {
-      $lastError = String(e);
+      repoError = `Couldn’t load repositories: ${String(e)}`;
     } finally {
       loadingRepos = false;
     }
   }
 
   $effect(() => {
-    void loadRepos();
-  });
-
-  $effect(() => {
-    // Default project when opening in project mode.
-    if (target === "project" && !projectSourceId && projectSources.length > 0) {
-      projectSourceId = projectSources[0].id;
-    }
-  });
-
-  $effect(() => {
     // When project (and therefore its Status field) changes, pre-select the
     // first option so new issues land under an active column by default.
-    if (!statusField) {
-      statusOptionId = "";
+    if (!projectSourceId) {
+      statusOptionId = null;
       return;
     }
+    if (!selectedProjectSnapshot) return;
+    if (!statusField) { statusOptionId = ""; return; }
+    if (statusOptionId === "") return;
     const stillValid = statusField.options.some((o) => o.id === statusOptionId);
     if (!stillValid) {
       statusOptionId = statusField.options[0]?.id ?? "";
@@ -137,66 +163,69 @@
   });
 
   $effect(() => {
-    // When the selected repo changes, fetch its labels. Reset prior selections
-    // since a label name in repo A may not exist in repo B.
     if (!repo || repo === lastLabelsRepo) return;
     const target = repo;
+    untrack(() => { void loadLabels(target); });
+  });
+
+  async function loadLabels(target: string) {
+    if (!target) return;
     lastLabelsRepo = target;
     loadingLabels = true;
+    labelsError = "";
     repoLabels = [];
-    selectedLabels = new Set();
-    api
-      .listRepoLabels(target)
-      .then((ls) => {
-        if (lastLabelsRepo === target) repoLabels = ls;
-      })
-      .catch((e) => {
-        $lastError = String(e);
-      })
-      .finally(() => {
-        if (lastLabelsRepo === target) loadingLabels = false;
-      });
-  });
+    try {
+      const labels = await api.listRepoLabels(target);
+      if (!disposed && lastLabelsRepo === target) repoLabels = labels;
+    } catch (e) {
+      if (!disposed && lastLabelsRepo === target) labelsError = `Couldn’t load labels: ${String(e)}`;
+    } finally {
+      if (lastLabelsRepo === target) loadingLabels = false;
+    }
+  }
 
   $effect(() => {
-    // When the selected repo changes, fetch its issue templates. Served
-    // from a local cache on subsequent picks of the same repo.
     if (!repo || repo === lastTemplatesRepo) return;
     const target = repo;
+    untrack(() => { void loadTemplates(target); });
+  });
+
+  async function loadTemplates(target: string, force = false) {
+    if (!target) return;
     lastTemplatesRepo = target;
+    loadingTemplates = true;
+    templatesError = "";
+    templates = [];
+    try {
+      const set = (!force && templatesByRepo.get(target)) || await api.listIssueTemplates(target);
+      if (disposed || lastTemplatesRepo !== target) return;
+      templatesByRepo.set(target, set);
+      templates = set.templates;
+      blankEnabled = set.blank_issues_enabled;
+      if (!blankEnabled && !templateKey && templates.length > 0) pickTemplate(templates[0].filename);
+    } catch (e) {
+      if (!disposed && lastTemplatesRepo === target) templatesError = `Couldn’t load issue templates: ${String(e)}`;
+    } finally {
+      if (lastTemplatesRepo === target) loadingTemplates = false;
+    }
+  }
+
+  function pickRepo(next: string) {
+    if (next === repo) return;
+    repo = next;
+    selectedLabels = new Set();
     templateKey = "";
     formValues = {};
-    // Reset touched-flags so a template picked in the new repo applies its
-    // title/body cleanly instead of being suppressed by stale edits.
     titleTouched = false;
     bodyTouched = false;
+    formErrors = [];
+  }
 
-    const cached = templatesByRepo.get(target);
-    if (cached) {
-      templates = cached.templates;
-      blankEnabled = cached.blank_issues_enabled;
-      return;
-    }
-    loadingTemplates = true;
-    templates = [];
-    api
-      .listIssueTemplates(target)
-      .then((set) => {
-        if (lastTemplatesRepo !== target) return;
-        templatesByRepo.set(target, set);
-        templates = set.templates;
-        blankEnabled = set.blank_issues_enabled;
-      })
-      .catch((e) => {
-        // Non-fatal — templates are a nice-to-have. Log to console so
-        // devtools users can still diagnose, but don't surface to the
-        // user as an error banner.
-        console.warn("[ghtasks] listIssueTemplates failed:", e);
-      })
-      .finally(() => {
-        if (lastTemplatesRepo === target) loadingTemplates = false;
-      });
-  });
+  function pickTemplate(next: string) {
+    templateKey = next;
+    formErrors = [];
+    applyTemplate(templates.find((template) => template.filename === next) ?? null);
+  }
 
   /** Apply a newly-selected template: prefill title / body / labels,
    * resetting the touched-flags so re-picking another template can
@@ -231,38 +260,32 @@
     }
   }
 
-  $effect(() => {
-    // React to template-picker changes only. Reading other state (like
-    // `titleTouched`) inside `applyTemplate` would otherwise make the
-    // effect re-fire on every keystroke in the title input — causing a
-    // feedback loop through the labels Set and a frozen UI.
-    const t = activeTemplate;
-    untrack(() => applyTemplate(t));
-  });
-
   function close() {
+    if (submitting) return;
+    newIssueDraft.set(snapshotDraft());
     $showNewIssue = false;
-    reset();
   }
-  function reset() {
-    title = "";
-    body = "";
-    selectedLabels = new Set();
-    issueType = "Task";
-    assignToMe = true;
-    templateKey = "";
-    formValues = {};
-    titleTouched = false;
-    bodyTouched = false;
+
+  function discard() {
+    if (submitting) return;
+    keepDraft = false;
+    clearNewIssueDraft();
+    $showNewIssue = false;
   }
 
   async function submit(e: Event) {
     e.preventDefault();
-    if (!title.trim() || submitting) return;
-    if (!repo) {
-      $lastError = "Pick a repository.";
-      return;
-    }
+    if (submitting) return;
+    formErrors = [];
+    if (!repo) formErrors.push("Pick a repository.");
+    if (!title.trim()) formErrors.push("Enter an issue title.");
+    if (loadingTemplates || templatesError) formErrors.push("Load the repository’s issue templates before creating the issue.");
+    if (missingTemplate) formErrors.push("Your saved template is unavailable. Choose an available template or a blank issue.");
+    if (!blankEnabled && !activeTemplate) formErrors.push("Choose an issue template for this repository.");
+    const projectSrc = projectSources.find((source) => source.id === projectSourceId) as (Source & { kind: "project" }) | undefined;
+    if (projectSourceId && !projectSrc) formErrors.push("The saved project connection is unavailable. Choose another project or No project.");
+    if (projectSourceId && !selectedProjectSnapshot) formErrors.push("Sync this project before creating the issue, or choose No project.");
+    if (formErrors.length > 0) return;
 
     // If the active template is a form, validate required fields and
     // serialize the values into a markdown body matching GitHub's shape.
@@ -270,7 +293,7 @@
     if (activeTemplate && activeTemplate.kind === "form") {
       const errs = validateForm(activeTemplate.body, formValues);
       if (errs.length > 0) {
-        $lastError = errs.join(" · ");
+        formErrors = errs;
         return;
       }
       composedBody = serializeForm(activeTemplate.body, formValues);
@@ -281,24 +304,13 @@
       body: composedBody || undefined,
       labels: selectedLabels.size > 0 ? [...selectedLabels] : undefined,
       type: issueType || undefined,
-      assignees: assignToMe && myLogin ? [myLogin] : undefined,
+      assignees: [...new Set([...templateAssignees, ...(assignToMe && myLogin ? [myLogin] : [])])],
     };
+    const targetRepo = repo;
     submitting = true;
     try {
       let created: Issue;
-      let projectSrc:
-        | (Source & { kind: "project" })
-        | undefined;
-
-      if (target === "project") {
-        projectSrc = projectSources.find((s) => s.id === projectSourceId) as
-          | (Source & { kind: "project" })
-          | undefined;
-        if (!projectSrc) {
-          $lastError = "Pick a project.";
-          submitting = false;
-          return;
-        }
+      if (projectSrc) {
         // Capture the project + status selection BEFORE awaiting so a
         // mid-flight project switch can't make the optimistic item point at
         // the wrong board / status field.
@@ -306,7 +318,7 @@
         const fieldId = statusField?.id;
         const optionId = statusOptionId || undefined;
         const res = await api.createIssueInProject(
-          repo,
+          targetRepo,
           projectSrc.project_id,
           input,
           fieldId,
@@ -315,7 +327,7 @@
         created = res.issue;
         const projectItem = buildProjectItem(
           created,
-          repo,
+          targetRepo,
           res.item_id,
           srcId,
           fieldId,
@@ -324,27 +336,29 @@
         insertProjectItem(projectSrc.id, projectItem);
         recordRecentlyCreated({
           issue: created,
-          repo,
+          repo: targetRepo,
           projectSourceId: projectSrc.id,
           item: projectItem,
           createdAt: Date.now(),
         });
       } else {
-        created = await api.createIssue(repo, input);
-        insertOptimistically(created, undefined, repo);
+        created = await api.createIssue(targetRepo, input);
         recordRecentlyCreated({
           issue: created,
-          repo,
+          repo: targetRepo,
           createdAt: Date.now(),
         });
       }
 
-      reset();
+      insertOptimistically(created, targetRepo);
+      keepDraft = false;
+      clearNewIssueDraft();
+      $createdIssueNotice = { repo: targetRepo, issue: created };
       $showNewIssue = false;
       // Don't await — let the slow snapshot fetch run in the background.
       void onCreated();
     } catch (e) {
-      $lastError = String(e);
+      formErrors = [`Couldn’t create the issue: ${String(e)}`];
     } finally {
       submitting = false;
     }
@@ -353,7 +367,6 @@
   /** Push a freshly-created Issue into a matching Repo source. */
   function insertOptimistically(
     issue: Issue,
-    _projectSourceIdIgnored: string | undefined,
     repoFullName: string,
   ) {
     const targetSourceId = $sources.find(
@@ -424,7 +437,30 @@
   }
 
   function onKey(e: KeyboardEvent) {
-    if (e.key === "Escape") close();
+    if (e.defaultPrevented) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      close();
+      return;
+    }
+    if (e.key !== "Tab" || !modal) return;
+    const controls = [...modal.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href], summary')]
+      .filter((element) => {
+        const collapsed = element.closest("details:not([open])");
+        return element.getClientRects().length > 0 && !element.closest('[hidden], [inert]')
+          && (!collapsed || collapsed.querySelector(":scope > summary")?.contains(element));
+      });
+    const first = controls[0];
+    const last = controls[controls.length - 1];
+    if (!first) { e.preventDefault(); return; }
+    if (e.shiftKey && (document.activeElement === first || !modal.contains(document.activeElement))) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && (document.activeElement === last || !modal.contains(document.activeElement))) {
+      e.preventDefault();
+      first.focus();
+    }
   }
 </script>
 
@@ -432,95 +468,48 @@
 
 <div
   class="backdrop"
+  bind:this={modal}
   role="dialog"
   aria-modal="true"
   aria-label="New issue"
+  aria-describedby="new-issue-draft-hint"
 >
   <div class="modal">
     <header class="head">
-      <div class="title">New issue</div>
-      <button class="ghost" aria-label="Close" onclick={close}>✕</button>
+      <div><div class="title">New issue</div><p id="new-issue-draft-hint" class="hint muted">Closing keeps your draft.</p></div>
+      <button class="ghost" aria-label="Close" onclick={close} disabled={submitting}>✕</button>
     </header>
 
-    <div class="target">
-      <button
-        class="seg"
-        class:active={target === "project"}
-        onclick={() => (target = "project")}
-        disabled={projectSources.length === 0}
-        title={projectSources.length === 0
-          ? "Add a Project source first"
-          : "Create in a project"}>Project</button
-      >
-      <button
-        class="seg"
-        class:active={target === "repo"}
-        onclick={() => (target = "repo")}>Repo only</button
-      >
-    </div>
-
-    <form class="form" onsubmit={submit}>
-      {#if target === "project"}
-        <label>
-          Project
-          <Select
-            value={projectSourceId}
-            placeholder="Pick a project"
-            options={projectSources.map((s) => ({
-              value: s.id,
-              label: s.name,
-              color: s.color ?? undefined,
-            }))}
-            onChange={(v) => (projectSourceId = (v as string) ?? "")}
-          />
-        </label>
-
-        {#if statusField}
-          <label>
-            Status
-            <StatusPicker
-              value={statusOptionId || null}
-              valueName={statusField.options.find(
-                (o) => o.id === statusOptionId,
-              )?.name ?? null}
-              valueColor={statusField.options.find(
-                (o) => o.id === statusOptionId,
-              )?.color ?? null}
-              options={statusField.options.map((o) => ({
-                id: o.id,
-                name: o.name,
-                color: o.color,
-              }))}
-              onPick={(opt) => (statusOptionId = opt ?? "")}
-            />
-          </label>
-        {:else if !selectedProjectSnapshot}
-          <div class="hint muted">
-            Status options will load once the project is synced.
-          </div>
-        {/if}
+    <form class="form" onsubmit={submit} novalidate>
+      <fieldset disabled={submitting}>
+      {#if repoError}
+        <div class="local-error" role="alert"><span>{repoError}</span><button type="button" class="ghost" onclick={() => loadRepos()}>Retry repositories</button></div>
       {/if}
 
       <label>
         Repository
         <Select
           value={repo}
+          ariaLabel="Repository"
           placeholder={loadingRepos ? "Loading…" : "Pick a repository"}
-          options={repos
-            .filter((r) => !r.archived)
-            .map((r) => ({
+          options={[
+            ...(repo && !repos.some((r) => r.full_name === repo) ? [{ value: repo, label: repo }] : []),
+            ...repos.filter((r) => !r.archived).map((r) => ({
               value: r.full_name,
               label: r.private ? `${r.full_name} 🔒` : r.full_name,
-            }))}
-          onChange={(v) => (repo = (v as string) ?? "")}
+            })),
+          ]}
+          onChange={(v) => pickRepo((v as string) ?? "")}
         />
       </label>
 
-      {#if templates.length > 0 || loadingTemplates}
+      {#if templates.length > 0 || loadingTemplates || missingTemplate}
         <label>
           Template
           <Select
             value={templateKey}
+            ariaLabel="Issue template"
+            disabled={loadingTemplates}
             placeholder={loadingTemplates ? "Loading…" : "Pick a template"}
             options={[
               ...(blankEnabled
@@ -535,15 +524,20 @@
                     : (t.description ?? undefined),
               })),
             ]}
-            onChange={(v) => (templateKey = (v as string) ?? "")}
+            onChange={(v) => pickTemplate((v as string) ?? "")}
           />
         </label>
+      {/if}
+      {#if templatesError}
+        <div class="local-error" role="alert"><span>{templatesError}</span><button type="button" class="ghost" onclick={() => loadTemplates(repo, true)}>Retry templates</button></div>
+      {:else if missingTemplate}
+        <div class="local-error" role="alert">Your saved template is unavailable. Choose another template or a blank issue.</div>
       {/if}
 
       <label>
         Title
-        <!-- svelte-ignore a11y_autofocus -->
         <input
+          bind:this={titleInput}
           value={title}
           oninput={(e) => {
             title = e.currentTarget.value;
@@ -551,7 +545,6 @@
           }}
           placeholder="What needs to be done?"
           required
-          autofocus
         />
       </label>
 
@@ -562,7 +555,7 @@
         />
       {:else}
         <label>
-          Body (markdown)
+          Description (Markdown)
           <textarea
             rows="5"
             value={body}
@@ -573,6 +566,41 @@
             placeholder="Notes, checklist…"
           ></textarea>
         </label>
+      {/if}
+
+      <label>
+        Add to project
+        <Select
+          value={projectSourceId}
+          ariaLabel="Add to project"
+          options={[
+            { value: "", label: "No project" },
+            ...projectSources.map((source) => ({ value: source.id, label: source.name, color: source.color ?? undefined })),
+          ]}
+          onChange={(value) => { projectSourceId = (value as string) ?? ""; statusOptionId = null; formErrors = []; }}
+        />
+      </label>
+      {#if projectSourceId && statusField}
+        <label>
+          Initial project status
+          <StatusPicker
+            value={statusOptionId || null}
+            valueName={statusField.options.find((option) => option.id === statusOptionId)?.name ?? null}
+            valueColor={statusField.options.find((option) => option.id === statusOptionId)?.color ?? null}
+            options={statusField.options.map((option) => ({ id: option.id, name: option.name, color: option.color }))}
+            ariaLabel="Initial project status"
+            onPick={(option) => (statusOptionId = option ?? "")}
+          />
+        </label>
+      {:else if projectSourceId && !selectedProjectSnapshot}
+        <p class="hint muted">Sync this project before creating an issue, or choose No project.</p>
+      {/if}
+
+      <details class="issue-options">
+      <summary>Issue options <span class="muted">Labels, type and assignees</span></summary>
+      <div class="options-body">
+      {#if labelsError}
+        <div class="local-error" role="alert"><span>{labelsError}</span><button type="button" class="ghost" onclick={() => loadLabels(repo)}>Retry labels</button></div>
       {/if}
 
       <div class="row">
@@ -617,17 +645,26 @@
           Assign to me ({myLogin})
         </label>
       {/if}
+      {#if templateAssignees.length > 0}<p class="hint muted">The template also assigns {templateAssignees.join(", ")}.</p>{/if}
+      </div>
+      </details>
+
+      {#if formErrors.length > 0}
+        <div class="local-error" role="alert"><ul>{#each formErrors as error}<li>{error}</li>{/each}</ul></div>
+      {/if}
 
       <div class="actions">
-        <button type="button" class="ghost" onclick={close}>Cancel</button>
+        <button type="button" class="discard" onclick={discard}>Discard draft</button>
+        <button type="button" class="ghost" onclick={close}>Keep draft &amp; go back</button>
         <button
           class="primary"
           type="submit"
-          disabled={submitting || !repo || !title.trim()}
+          disabled={submitting || !repo || !title.trim() || loadingTemplates || !!templatesError || missingTemplate || (!!projectSourceId && !selectedProjectSnapshot)}
         >
           {submitting ? "Creating…" : "Create issue"}
         </button>
       </div>
+      </fieldset>
     </form>
   </div>
 </div>
@@ -653,36 +690,25 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 10px;
+    padding: 12px 18px;
     border-bottom: 1px solid var(--border);
   }
   .title {
     font-weight: 500;
+    font-size: 18px;
   }
-  .target {
+  .head p { margin: 4px 0 0; }
+  fieldset {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
     display: flex;
-    gap: 4px;
-    padding: 8px 10px 0;
-  }
-  .seg {
-    flex: 1;
-    font-size: 12px;
-    padding: 4px 8px;
-    background: var(--bg-elev);
-    color: var(--text-dim);
-    border: 1px solid var(--border);
-  }
-  .seg.active {
-    background: var(--accent);
-    color: white;
-    border-color: var(--accent);
-  }
-  .seg:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+    flex-direction: column;
+    gap: 16px;
   }
   .form {
-    padding: 10px;
+    padding: 18px;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -707,6 +733,7 @@
   .row {
     display: flex;
     gap: 8px;
+    flex-wrap: wrap;
   }
   .grow {
     flex: 1;
@@ -715,8 +742,19 @@
     display: flex;
     gap: 6px;
     justify-content: flex-end;
-    margin-top: 4px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 6px;
   }
+  .actions button { font-size: 12px; }
+  .discard { border: 0; background: transparent; color: var(--text-dim); margin-right: auto; padding-left: 0; }
+  .discard:hover { color: var(--danger); }
+  .issue-options { border: 1px solid var(--border); border-radius: 8px; background: var(--bg-elev); }
+  .issue-options > summary { cursor: pointer; padding: 10px 12px; font-size: 12px; }
+  .issue-options > summary span { display: block; margin: 3px 0 0 14px; font-size: 11px; }
+  .options-body { display: flex; flex-direction: column; gap: 12px; padding: 12px; border-top: 1px solid var(--border); }
+  .local-error { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 10px 12px; background: rgba(229, 72, 77, 0.12); border: 1px solid rgba(229, 72, 77, 0.35); border-radius: 8px; color: #ffb4b7; font-size: 12px; }
+  .local-error ul { margin: 0; padding-left: 16px; }
   .hint {
     font-size: 11px;
     line-height: 1.4;

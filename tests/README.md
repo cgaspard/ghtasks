@@ -66,6 +66,11 @@ in [`tauriMock.ts`](e2e/fixtures/tauriMock.ts) (`Scenario`). Project boards are
 delivered the way the app expects — as `project-page` events streamed from
 `fetch_all_projects_streaming`.
 
+The streaming invoke includes a `generation` number, and every `project-page`
+event echoes it. The mock stamps scripted pages with that request generation.
+Tests that emit pages manually must include the matching generation; use the
+helper in `project-streaming.spec.ts`. Stale generations are deliberately ignored.
+
 Need a command the mock doesn't handle yet? Add a `case` in `tauriMock.ts`, or
 pass a one-off `overrides: { some_command: value }` in the scenario. Unhandled
 commands `console.warn` so a missing mock is obvious.

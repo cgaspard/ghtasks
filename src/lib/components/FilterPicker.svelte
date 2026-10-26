@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { floatingMenu } from "../floatingMenu";
 
   interface Option {
     value: string;
@@ -22,6 +23,16 @@
 
   let open = $state(false);
   let root: HTMLDivElement | undefined = $state();
+  let menu: HTMLDivElement | undefined = $state();
+  let trigger: HTMLButtonElement | undefined = $state();
+
+  function onKey(e: KeyboardEvent) {
+    if (!open || e.key !== "Escape") return;
+    e.preventDefault();
+    e.stopPropagation();
+    open = false;
+    trigger?.focus();
+  }
 
   function toggle(value: string) {
     const next = new Set(selected);
@@ -36,12 +47,16 @@
 
   function onDocClick(e: MouseEvent) {
     if (!open) return;
-    if (root && !root.contains(e.target as Node)) open = false;
+    if (root && !root.contains(e.target as Node) && !menu?.contains(e.target as Node)) open = false;
   }
 
   onMount(() => {
     document.addEventListener("click", onDocClick);
-    return () => document.removeEventListener("click", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("click", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
   });
 
   const summary = $derived(
@@ -55,18 +70,18 @@
 </script>
 
 <div class="picker" bind:this={root}>
-  <button class="trigger" class:active={selected.size > 0} onclick={() => (open = !open)}>
+  <button type="button" class="trigger" bind:this={trigger} class:active={selected.size > 0} aria-expanded={open} aria-haspopup="dialog" onclick={() => (open = !open)}>
     <span class="pill-label">{label}:</span>
     <span class="pill-value">{summary}</span>
     <span class="caret">▾</span>
   </button>
 
   {#if open}
-    <div class="menu" role="menu">
+    <div class="menu" role="dialog" aria-label={`${label} filters`} bind:this={menu} use:floatingMenu={{ anchor: root! }}>
       <div class="menu-head">
         <span class="menu-title">{label}</span>
         {#if selected.size > 0}
-          <button class="ghost tiny" onclick={clearAll}>Clear</button>
+          <button type="button" class="ghost tiny" onclick={clearAll}>Clear</button>
         {/if}
       </div>
       <div class="menu-body">

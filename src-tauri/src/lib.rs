@@ -78,7 +78,7 @@ pub fn run() {
             // Hide from the macOS Dock; the app lives in the menu bar.
             #[cfg(target_os = "macos")]
             {
-                let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             }
 
             // Hide on blur so the popover behaves like a menu-bar panel.
@@ -122,7 +122,7 @@ pub fn run() {
                 }
 
                 use tauri_plugin_autostart::ManagerExt;
-                if let Ok(s) = sources::load_settings(&app.handle()) {
+                if let Ok(s) = sources::load_settings(app.handle()) {
                     let mgr = app.autolaunch();
                     let currently = mgr.is_enabled().unwrap_or(false);
                     if s.launch_at_login && !currently {
@@ -136,7 +136,7 @@ pub fn run() {
             if let Some(win) = app.get_webview_window("main") {
                 // Apply the user's preferred size preset before the first show.
                 #[cfg(desktop)]
-                tray::apply_saved_size(&app.handle(), &win);
+                tray::apply_saved_size(app.handle(), &win);
 
                 // The white flash on tray-click show is killed by wry
                 // setting `drawsBackground = false` on the WKWebView

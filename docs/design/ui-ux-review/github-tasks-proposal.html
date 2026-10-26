@@ -1,0 +1,515 @@
+<div id="ghtasks-review-proposal" class="viz-dotted-background" aria-label="GitHub Tasks design proposal">
+  <section aria-label="Focused pages design">
+    <div class="gt-stage"><div class="gt-window" data-design="focused" aria-label="GitHub Tasks with focused settings pages"></div></div>
+  </section>
+</div>
+<style>
+  #ghtasks-review-proposal .gt-stage { min-height: 754px; padding: 12px 8px 24px; display: flex; align-items: flex-start; justify-content: center; }
+  #ghtasks-review-proposal .gt-window {
+    --gt-bg: light-dark(#ffffff, #11151c); --gt-surface: light-dark(#f5f7fa, #1b212b);
+    --gt-hover: light-dark(#edf1f7, #252e3b); --gt-text: light-dark(#202937, #e9edf4);
+    --gt-secondary: light-dark(#586576, #a6b2c4); --gt-line: light-dark(#dce2ea, #303b4b);
+    --gt-blue: light-dark(#235fc7, #8ab4ff); --gt-blue-bg: light-dark(#eaf1ff, #213553);
+    --gt-primary: light-dark(#285fc4, #285fc4); --gt-on-primary: #ffffff;
+    --gt-green: light-dark(#21734e, #81d5a6); --gt-green-bg: light-dark(#edf8f1, #1b3329);
+    --gt-amber: light-dark(#805a0c, #edc97e); --gt-amber-bg: light-dark(#fff6df, #362c1c);
+    --gt-red: light-dark(#b12f40, #ff9ba8); --gt-shadow: light-dark(#2029371c, #00000040);
+    --gt-purple: light-dark(#8144b9, #ba8aee); --gt-purple-bg: light-dark(#f4edfb, #30213e);
+    --gt-backlog: light-dark(#647080, #9aa0ac); --gt-todo: light-dark(#2563c8, #4f8cff);
+    --gt-progress: light-dark(#88620b, #d4a72c); --gt-review: light-dark(#8144b9, #8957e5); --gt-done: light-dark(#21734e, #2ea043);
+    color-scheme: light dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    color: var(--gt-text); background: var(--gt-bg); font-size: 13px; line-height: 1.5;
+    width: 100%; max-width: 480px; min-height: 694px; border: 1px solid var(--gt-line); border-radius: 14px;
+    box-shadow: 0 8px 24px var(--gt-shadow); overflow: clip; text-align: left; display: flex; flex-direction: column;
+  }
+  #ghtasks-review-proposal .gt-window *, #ghtasks-review-proposal .gt-window *::before { box-sizing: border-box; }
+  #ghtasks-review-proposal .gt-window button, #ghtasks-review-proposal .gt-window input, #ghtasks-review-proposal .gt-window textarea { font: inherit; }
+  #ghtasks-review-proposal .gt-window button { appearance: none; color: inherit; border: 1px solid var(--gt-line); background: var(--gt-bg); border-radius: 7px; padding: 6px 10px; min-height: 32px; text-align: center; }
+  #ghtasks-review-proposal .gt-window button:hover { background: var(--gt-hover); }
+  #ghtasks-review-proposal .gt-window button:disabled { opacity: .5; cursor: not-allowed; }
+  #ghtasks-review-proposal .gt-window button.gt-primary { background: var(--gt-primary); color: var(--gt-on-primary); border-color: var(--gt-primary); }
+  #ghtasks-review-proposal .gt-window button.gt-quiet { border-color: transparent; background: transparent; }
+  #ghtasks-review-proposal .gt-window button.gt-link { border-color: transparent; color: var(--gt-blue); background: transparent; padding-left: 0; }
+  #ghtasks-review-proposal .gt-window button.gt-danger { color: var(--gt-red); }
+  #ghtasks-review-proposal .gt-window button[aria-pressed="true"] { background: var(--gt-blue-bg); color: var(--gt-blue); border-color: var(--gt-blue); }
+  #ghtasks-review-proposal .gt-nav { display: flex; align-items: center; gap: 4px; padding: 9px 12px; background: var(--gt-surface); border-bottom: 1px solid var(--gt-line); flex-wrap: wrap; }
+  #ghtasks-review-proposal .gt-nav button { border: 0; font-weight: 500; padding: 6px 9px; background: transparent; }
+  #ghtasks-review-proposal .gt-nav button[aria-pressed="true"] { border: 0; background: var(--gt-bg); color: var(--gt-text); box-shadow: 0 1px 3px var(--gt-shadow); }
+  #ghtasks-review-proposal .gt-nav .gt-settings { margin-left: auto; }
+  #ghtasks-review-proposal .gt-count { display: inline-block; padding: 0 5px; margin-left: 4px; font-size: 11px; border-radius: 5px; background: var(--gt-blue-bg); color: var(--gt-blue); }
+  #ghtasks-review-proposal .gt-window svg { display: inline-block; width: 16px; height: 16px; vertical-align: -3px; flex-shrink: 0; }
+  #ghtasks-review-proposal .gt-header { padding: 14px 20px 12px; border-bottom: 1px solid var(--gt-line); }
+  #ghtasks-review-proposal .gt-back { margin: -4px 0 6px -9px; }
+  #ghtasks-review-proposal .gt-window h1, #ghtasks-review-proposal .gt-window h2, #ghtasks-review-proposal .gt-window h3, #ghtasks-review-proposal .gt-window p { margin: 0; }
+  #ghtasks-review-proposal .gt-window h1 { font-size: 20px; font-weight: 500; line-height: 1.3; letter-spacing: -.3px; }
+  #ghtasks-review-proposal .gt-window h2 { font-size: 14px; font-weight: 500; }
+  #ghtasks-review-proposal .gt-window h3 { font-size: 13px; font-weight: 500; }
+  #ghtasks-review-proposal .gt-sub { color: var(--gt-secondary); font-size: 12px; margin-top: 5px !important; }
+  #ghtasks-review-proposal .gt-content { padding: 16px 20px; min-height: 438px; flex: 1; }
+  #ghtasks-review-proposal .gt-footer { border-top: 1px solid var(--gt-line); padding: 10px 20px; color: var(--gt-secondary); font-size: 11px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: auto; }
+  #ghtasks-review-proposal .gt-footer button { font-size: 12px; margin-left: auto; }
+  #ghtasks-review-proposal .gt-home { display: flex; flex-direction: column; }
+  #ghtasks-review-proposal .gt-home button { padding: 14px 0; display: flex; width: 100%; align-items: center; gap: 12px; text-align: left; border: 0; border-bottom: 1px solid var(--gt-line); border-radius: 0; background: transparent; }
+  #ghtasks-review-proposal .gt-home button:last-child { border-bottom: 0; }
+  #ghtasks-review-proposal .gt-home .gt-home-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 9px; background: var(--gt-surface); color: var(--gt-secondary); }
+  #ghtasks-review-proposal .gt-section-title { margin-top: 20px !important; padding: 8px 10px; border-left: 3px solid var(--gt-blue); background: var(--gt-surface); border-radius: 0 6px 6px 0; }
+  #ghtasks-review-proposal .gt-fill { flex: 1; min-width: 0; }
+  #ghtasks-review-proposal .gt-muted { color: var(--gt-secondary); }
+  #ghtasks-review-proposal .gt-small { font-size: 12px; }
+  #ghtasks-review-proposal .gt-eyebrow { font-size: 11px; color: var(--gt-secondary); text-transform: uppercase; letter-spacing: .6px; margin: 20px 0 6px; }
+  #ghtasks-review-proposal .gt-eyebrow:first-child { margin-top: 0; }
+  #ghtasks-review-proposal .gt-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  #ghtasks-review-proposal .gt-between { display: flex; gap: 12px; justify-content: space-between; align-items: center; }
+  #ghtasks-review-proposal .gt-connection { display: flex; gap: 10px; padding: 14px 0; border-bottom: 1px solid var(--gt-line); align-items: flex-start; }
+  #ghtasks-review-proposal .gt-connection > i, #ghtasks-review-proposal .gt-connection > svg { margin-top: 4px; color: var(--gt-secondary); }
+  #ghtasks-review-proposal .gt-connection button { font-size: 12px; }
+  #ghtasks-review-proposal .gt-status { font-size: 11px; color: var(--gt-green); display: inline-flex; gap: 4px; align-items: center; }
+  #ghtasks-review-proposal .gt-status.gt-paused { color: var(--gt-secondary); }
+  #ghtasks-review-proposal .gt-status svg { width: 12px; height: 12px; }
+  #ghtasks-review-proposal .gt-field { display: grid; gap: 6px; margin: 0 0 20px; }
+  #ghtasks-review-proposal .gt-field > label { font-weight: 500; }
+  #ghtasks-review-proposal .gt-window input:not([type="checkbox"]), #ghtasks-review-proposal .gt-window textarea { width: 100%; color: var(--gt-text); background: var(--gt-bg); border: 1px solid var(--gt-line); padding: 9px 10px; border-radius: 7px; min-width: 0; }
+  #ghtasks-review-proposal .gt-window textarea { resize: vertical; min-height: 100px; }
+  #ghtasks-review-proposal .gt-window input::placeholder, #ghtasks-review-proposal .gt-window textarea::placeholder { color: var(--gt-secondary); opacity: 1; }
+  #ghtasks-review-proposal .gt-window input[type="color"] { width: 48px; height: 32px; padding: 3px; }
+  #ghtasks-review-proposal .gt-toggle { display: flex; align-items: flex-start; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--gt-line); }
+  #ghtasks-review-proposal .gt-toggle input { width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--gt-primary); flex-shrink: 0; }
+  #ghtasks-review-proposal .gt-toggle label { flex: 1; }
+  #ghtasks-review-proposal .gt-toggle .gt-sub { display: block; }
+  #ghtasks-review-proposal .gt-options { display: flex; gap: 6px; flex-wrap: wrap; }
+  #ghtasks-review-proposal .gt-options button { flex: 1; font-size: 12px; }
+  #ghtasks-review-proposal .gt-note { padding: 12px; border-radius: 8px; background: var(--gt-surface); font-size: 12px; margin: 14px 0; }
+  #ghtasks-review-proposal .gt-note.gt-warning { background: var(--gt-amber-bg); color: var(--gt-amber); }
+  #ghtasks-review-proposal .gt-note.gt-good { background: var(--gt-green-bg); color: var(--gt-green); }
+  #ghtasks-review-proposal .gt-note p + p { margin-top: 5px; }
+  #ghtasks-review-proposal .gt-note button { background: transparent; border-color: currentColor; color: inherit; font-size: 12px; margin-top: 8px; }
+  #ghtasks-review-proposal .gt-disclosure { border-bottom: 1px solid var(--gt-line); }
+  #ghtasks-review-proposal .gt-disclosure > summary { padding: 14px 0; font-weight: 500; }
+  #ghtasks-review-proposal .gt-disclosure > summary small { color: var(--gt-secondary); font-size: 11px; font-weight: 400; display: block; margin-left: 16px; }
+  #ghtasks-review-proposal .gt-disclosure > .gt-group-body { padding: 8px 0 16px; }
+  #ghtasks-review-proposal .gt-disclosure[open] { border: 1px solid var(--gt-line); border-radius: 8px; background: var(--gt-surface); margin-top: 10px; }
+  #ghtasks-review-proposal .gt-disclosure[open] > summary { padding: 12px; }
+  #ghtasks-review-proposal .gt-disclosure[open] > .gt-group-body { padding: 14px 12px; border-top: 1px solid var(--gt-line); }
+  #ghtasks-review-proposal .gt-choice { position: relative; }
+  #ghtasks-review-proposal .gt-choice > summary { padding: 8px 10px; border: 1px solid var(--gt-line); border-radius: 7px; background: var(--gt-bg); list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 36px; }
+  #ghtasks-review-proposal .gt-choice > summary::-webkit-details-marker { display: none; }
+  #ghtasks-review-proposal .gt-choice[open] > .gt-choice-menu { display: grid; border: 1px solid var(--gt-line); border-radius: 7px; margin-top: 5px; padding: 4px; background: var(--gt-surface); }
+  #ghtasks-review-proposal .gt-choice-menu button { border: 0; background: transparent; text-align: left; }
+  #ghtasks-review-proposal .gt-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 20px; }
+  #ghtasks-review-proposal .gt-preview { background: var(--gt-surface); border: 1px solid var(--gt-line); border-radius: 9px; padding: var(--gt-row-pad, 14px); margin-top: 10px; }
+  #ghtasks-review-proposal .gt-preview .gt-between { align-items: flex-start; }
+  #ghtasks-review-proposal .gt-height-preview { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+  #ghtasks-review-proposal .gt-mini-window { width: 68px; padding: 8px; border: 1px solid var(--gt-line); border-radius: 6px; background: var(--gt-surface); flex-shrink: 0; }
+  #ghtasks-review-proposal .gt-mini-window span { display: block; height: 5px; background: var(--gt-line); border-radius: 2px; margin-bottom: 8px; }
+  #ghtasks-review-proposal .gt-task-status { min-width: 100px; font-size: 11px; }
+  #ghtasks-review-proposal .gt-task-status > summary { min-height: 28px; padding: 3px 7px; background: var(--gt-surface); }
+  #ghtasks-review-proposal .gt-task-status > .gt-choice-menu { position: absolute; top: calc(100% + 4px); right: 0; min-width: 144px; z-index: 20; margin-top: 0; box-shadow: 0 6px 18px var(--gt-shadow); }
+  #ghtasks-review-proposal .gt-task-status[data-placement="above"] > .gt-choice-menu { top: auto; bottom: calc(100% + 4px); }
+  #ghtasks-review-proposal .gt-list-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 16px 12px; flex-wrap: wrap; }
+  #ghtasks-review-proposal .gt-list-toolbar .gt-filters { padding: 0; flex: 1; }
+  #ghtasks-review-proposal .gt-view-toggle { display: inline-flex; gap: 2px; padding: 2px; background: var(--gt-surface); border: 1px solid var(--gt-line); border-radius: 7px; flex-shrink: 0; }
+  #ghtasks-review-proposal .gt-view-toggle button { border: 0; padding: 4px 7px; min-height: 28px; font-size: 11px; }
+  #ghtasks-review-proposal .gt-view-toggle button[aria-pressed="true"] { background: var(--gt-bg); color: var(--gt-text); box-shadow: 0 1px 3px var(--gt-shadow); }
+  #ghtasks-review-proposal .gt-bucket { border-top: 1px solid var(--gt-line); }
+  #ghtasks-review-proposal .gt-bucket > summary { list-style: none; padding: 8px 16px; display: flex; align-items: center; gap: 8px; background: var(--gt-surface); color: var(--gt-status-color); min-height: 34px; font-weight: 500; }
+  #ghtasks-review-proposal .gt-bucket > summary::-webkit-details-marker { display: none; }
+  #ghtasks-review-proposal .gt-status-dot { width: 8px; height: 8px; background: var(--gt-status-color); border-radius: 50%; flex-shrink: 0; }
+  #ghtasks-review-proposal .gt-bucket-count { color: var(--gt-secondary); font-size: 11px; font-weight: 400; }
+  #ghtasks-review-proposal .gt-bucket-caret { margin-left: auto; color: var(--gt-secondary); transform: rotate(-90deg); }
+  #ghtasks-review-proposal .gt-bucket[open] .gt-bucket-caret { transform: rotate(0); }
+  #ghtasks-review-proposal .gt-bucket .gt-task { border-top: 0; border-bottom: 1px solid var(--gt-line); border-left: 3px solid var(--gt-status-color); }
+  #ghtasks-review-proposal .gt-bucket .gt-task:last-child { border-bottom: 0; }
+  #ghtasks-review-proposal .gt-bucket .gt-task-status > summary { color: var(--gt-status-color); background: color-mix(in srgb, var(--gt-status-color) 9%, var(--gt-bg)); border-color: color-mix(in srgb, var(--gt-status-color) 30%, var(--gt-line)); }
+  #ghtasks-review-proposal .gt-task-checkbox { display: grid; place-items: center; width: 28px; height: 30px; flex-shrink: 0; }
+  #ghtasks-review-proposal .gt-task-checkbox input { width: 17px; height: 17px; margin: 0; accent-color: var(--gt-primary); }
+  #ghtasks-review-proposal .gt-task.gt-todo .gt-meta, #ghtasks-review-proposal .gt-task.gt-todo .gt-task-bottom { margin-left: 38px; }
+  #ghtasks-review-proposal .gt-task.gt-short { padding: 5px 12px; }
+  #ghtasks-review-proposal .gt-task.gt-short .gt-task-title { flex-wrap: nowrap; align-items: center; gap: 6px; }
+  #ghtasks-review-proposal .gt-task.gt-short .gt-task-title .gt-fill { min-width: 0; }
+  #ghtasks-review-proposal .gt-task.gt-short .gt-task-title .gt-fill > button { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; min-height: 28px; }
+  #ghtasks-review-proposal .gt-task.gt-short .gt-task-status { min-width: 0; font-size: 11px; flex-shrink: 0; }
+  #ghtasks-review-proposal .gt-task.gt-short .gt-task-status > summary { max-width: 108px; min-height: 28px; }
+  #ghtasks-review-proposal .gt-inline-number { font-size: 11px; color: var(--gt-secondary); white-space: nowrap; flex-shrink: 0; }
+  #ghtasks-review-proposal .gt-short-action { padding: 3px 5px !important; font-size: 11px !important; min-height: 28px !important; flex-shrink: 0; }
+  #ghtasks-review-proposal .gt-close-confirm { background: var(--gt-surface); padding: 12px; border: 1px solid var(--gt-line); border-radius: 8px; margin-top: 10px; }
+  #ghtasks-review-proposal .gt-close-confirm .gt-actions { margin-top: 10px; }
+  #ghtasks-review-proposal .gt-close-confirm p { font-size: 12px; color: var(--gt-secondary); margin-top: 4px; }
+  #ghtasks-review-proposal .gt-pr { color: var(--gt-green); font-size: 11px; }
+  #ghtasks-review-proposal .gt-pr.gt-merged { color: var(--gt-purple); }
+  #ghtasks-review-proposal .gt-pr.gt-draft { color: var(--gt-secondary); }
+  #ghtasks-review-proposal .gt-chip { background: var(--gt-blue-bg); color: var(--gt-blue); font-size: 11px; padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+  #ghtasks-review-proposal .gt-tools { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 14px 16px 10px; }
+  #ghtasks-review-proposal .gt-filters { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 0 16px 12px; }
+  #ghtasks-review-proposal .gt-filters button { font-size: 12px; }
+  #ghtasks-review-proposal .gt-list { min-height: 424px; }
+  #ghtasks-review-proposal .gt-task { padding: var(--gt-row-pad, 14px) 18px; border-top: 1px solid var(--gt-line); }
+  #ghtasks-review-proposal .gt-task-title { display: flex; align-items: flex-start; gap: 10px; }
+  #ghtasks-review-proposal .gt-task-title .gt-fill > button { padding: 2px 0; min-height: 28px; width: 100%; text-align: left; font-weight: 500; line-height: 1.5; border: 0; }
+  #ghtasks-review-proposal .gt-task-title .gt-fill > button:hover { color: var(--gt-blue); }
+  #ghtasks-review-proposal .gt-meta { font-size: 12px; color: var(--gt-secondary); margin-top: 5px; display: flex; gap: 6px; flex-wrap: wrap; }
+  #ghtasks-review-proposal .gt-task-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 7px; }
+  #ghtasks-review-proposal .gt-task-bottom button { font-size: 11px; padding: 3px 7px; min-height: 27px; }
+  #ghtasks-review-proposal .gt-attention { color: var(--gt-amber); font-size: 11px; }
+  #ghtasks-review-proposal .gt-empty { padding: 48px 24px; text-align: center; }
+  #ghtasks-review-proposal .gt-empty > svg { width: 28px; height: 28px; color: var(--gt-secondary); margin-bottom: 12px; }
+  #ghtasks-review-proposal .gt-empty h2 { margin-bottom: 8px; }
+  #ghtasks-review-proposal .gt-empty p { color: var(--gt-secondary); font-size: 12px; margin: 0 auto 18px; max-width: 290px; }
+  #ghtasks-review-proposal .gt-banner { margin: 12px 16px; }
+  #ghtasks-review-proposal .gt-article { font-size: 13px; }
+  #ghtasks-review-proposal .gt-article p { margin: 16px 0; }
+  #ghtasks-review-proposal .gt-check { display: flex; align-items: flex-start; gap: 8px; margin: 10px 0; }
+  #ghtasks-review-proposal .gt-check input { margin: 4px 0 0; accent-color: var(--gt-primary); }
+  #ghtasks-review-proposal .gt-toast { margin: 12px 20px; padding: 9px 12px; background: var(--gt-green-bg); color: var(--gt-green); font-size: 12px; border-radius: 7px; }
+  #ghtasks-review-proposal .gt-avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--gt-blue-bg); color: var(--gt-blue); font-size: 11px; }
+  #ghtasks-review-proposal .gt-project-zone { --gt-bg: light-dark(#ffffff, #0f1116); --gt-surface: light-dark(#f5f7fa, #171a21); --gt-text: light-dark(#202937, #e6e6e6); --gt-line: light-dark(#dce2ea, #2a2f3a); --gt-secondary: light-dark(#586576, #9aa0ac); background: var(--gt-bg); color: var(--gt-text); flex: 1; }
+  #ghtasks-review-proposal .gt-project-search { display: flex; align-items: center; gap: 6px; padding: 8px 10px; }
+  #ghtasks-review-proposal .gt-project-search input { flex: 1; min-width: 0; padding: 6px 8px; min-height: 30px; background: var(--gt-surface); font-size: 12px; }
+  #ghtasks-review-proposal .gt-project-search button { flex-shrink: 0; font-size: 11px; min-height: 25px; padding: 4px 8px; border-radius: 9px; }
+  #ghtasks-review-proposal .gt-project-filterbar { display: flex; align-items: center; gap: 6px; padding: 0 10px 8px; flex-wrap: wrap; }
+  #ghtasks-review-proposal .gt-project-mine { display: flex; border: 1px solid var(--gt-line); border-radius: 999px; overflow: clip; }
+  #ghtasks-review-proposal .gt-project-mine button { border: 0; border-radius: 0; padding: 2px 10px; min-height: 19px; font-size: 11px; line-height: 1.3; background: var(--gt-surface); color: var(--gt-secondary); }
+  #ghtasks-review-proposal .gt-project-mine button[aria-pressed="true"] { background: var(--gt-primary); color: var(--gt-on-primary); }
+  #ghtasks-review-proposal .gt-project-filter { font-size: 11px; position: relative; }
+  #ghtasks-review-proposal .gt-project-filter > summary { min-height: 22px; padding: 2px 8px; border-radius: 999px; gap: 4px; color: var(--gt-secondary); background: var(--gt-surface); line-height: 1.3; }
+  #ghtasks-review-proposal .gt-project-filter > .gt-choice-menu { position: absolute; top: 100%; left: 0; min-width: 140px; z-index: 25; }
+  #ghtasks-review-proposal .gt-project-filter:last-child > .gt-choice-menu { left: auto; right: 0; }
+  #ghtasks-review-proposal .gt-project-viewbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px 8px; }
+  #ghtasks-review-proposal .gt-project-viewbar > span { font-size: 11px; color: var(--gt-secondary); }
+  #ghtasks-review-proposal .gt-project-flat { border-top: 1px solid var(--gt-line); }
+  #ghtasks-review-proposal .gt-project-card { border-bottom: 1px solid var(--gt-line); position: relative; padding: var(--gt-project-pad, 9px) 14px var(--gt-project-pad, 9px) 15px; background: var(--gt-bg); }
+  #ghtasks-review-proposal .gt-project-card::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 2px; background: var(--gt-status-color); }
+  #ghtasks-review-proposal .gt-project-card:hover { background: var(--gt-surface); }
+  #ghtasks-review-proposal .gt-project-line1 { display: flex; align-items: center; gap: 8px; min-height: 24px; }
+  #ghtasks-review-proposal .gt-project-card .gt-project-title { border: 0; border-radius: 0; background: transparent; padding: 0; min-height: 20px; flex: 1 1 auto; min-width: 0; color: var(--gt-text); font-size: 13.5px; font-weight: 500; line-height: 1.35; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #ghtasks-review-proposal .gt-project-card .gt-project-title:hover { color: var(--gt-blue); }
+  #ghtasks-review-proposal .gt-project-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  #ghtasks-review-proposal .gt-project-tray { display: flex; gap: 2px; opacity: 0; }
+  #ghtasks-review-proposal .gt-project-card:hover .gt-project-tray, #ghtasks-review-proposal .gt-project-card:focus-within .gt-project-tray { opacity: 1; }
+  #ghtasks-review-proposal .gt-project-tray button { display: grid; place-items: center; width: 24px; height: 24px; min-height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--gt-secondary); }
+  #ghtasks-review-proposal .gt-project-tray button:hover { background: var(--gt-hover); color: var(--gt-text); }
+  #ghtasks-review-proposal .gt-project-status { min-width: 0; }
+  #ghtasks-review-proposal .gt-project-status > summary { border: 0; border-radius: 0; background: transparent; min-height: 20px; padding: 0; gap: 3px; color: var(--gt-status-color); font-size: 9.5px; font-weight: 700; letter-spacing: .055em; text-transform: uppercase; white-space: nowrap; }
+  #ghtasks-review-proposal .gt-project-status > summary:hover { text-decoration: underline; }
+  #ghtasks-review-proposal .gt-project-status > .gt-choice-menu { text-transform: none; font-size: 12px; font-weight: 400; letter-spacing: normal; }
+  #ghtasks-review-proposal .gt-project-line2 { display: flex; align-items: center; gap: 6px; color: var(--gt-secondary); font-size: 11px; line-height: 1.2; margin-top: 4px; white-space: nowrap; overflow: hidden; }
+  #ghtasks-review-proposal .gt-project-line2 .gt-project-repo { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  #ghtasks-review-proposal .gt-project-line2 .gt-project-pr { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: transparent; border-radius: 0; min-height: 13px; font-size: 11px; font-weight: 600; white-space: nowrap; flex-shrink: 0; color: var(--gt-project-pr-color); }
+  #ghtasks-review-proposal .gt-project-sep { opacity: .45; flex-shrink: 0; }
+  #ghtasks-review-proposal .gt-project-time { flex-shrink: 0; }
+  #ghtasks-review-proposal .gt-project-line3 { display: flex; align-items: center; gap: 5px; margin-top: 3px; color: var(--gt-secondary); font-size: 11px; line-height: 1.2; overflow: hidden; white-space: nowrap; }
+  #ghtasks-review-proposal .gt-project-line3 button { border: 0; background: transparent; border-radius: 0; min-height: 13px; padding: 0; font-size: 11px; color: var(--gt-secondary); }
+  #ghtasks-review-proposal .gt-project-line3 span { flex-shrink: 0; }
+  #ghtasks-review-proposal .gt-project-card[data-density="compact"] .gt-project-line3 { display: none; }
+  #ghtasks-review-proposal .gt-project-card[data-density="comfortable"] .gt-project-title { font-size: 14px; }
+  #ghtasks-review-proposal .gt-project-card[data-density="spacious"] .gt-project-title { font-size: 15.5px; }
+  #ghtasks-review-proposal .gt-project-comment { margin-top: 8px; }
+  @media (max-width: 400px) {
+    #ghtasks-review-proposal .gt-project-tray { position: absolute; top: 33px; right: 12px; padding: 2px; background: var(--gt-surface); border: 1px solid var(--gt-line); border-radius: 6px; z-index: 3; }
+  }
+  @media (pointer: coarse) {
+    #ghtasks-review-proposal .gt-project-search button, #ghtasks-review-proposal .gt-project-mine button, #ghtasks-review-proposal .gt-project-filter > summary { min-height: 44px; }
+    #ghtasks-review-proposal .gt-project-tray { opacity: 1; }
+  }
+  @media (max-width: 400px) {
+    #ghtasks-review-proposal .gt-stage { padding: 8px 0 20px; min-height: 830px; }
+    #ghtasks-review-proposal .gt-header, #ghtasks-review-proposal .gt-content { padding-left: 14px; padding-right: 14px; }
+    #ghtasks-review-proposal .gt-nav { padding: 8px; gap: 0; }
+    #ghtasks-review-proposal .gt-nav button { padding: 6px 7px; font-size: 12px; }
+    #ghtasks-review-proposal .gt-preview .gt-between, #ghtasks-review-proposal .gt-task-title { flex-wrap: wrap; }
+    #ghtasks-review-proposal .gt-tools { grid-template-columns: 1fr; }
+    #ghtasks-review-proposal .gt-list-toolbar .gt-filters { flex: 1 0 100%; }
+    #ghtasks-review-proposal .gt-list-toolbar .gt-view-toggle { margin-left: auto; }
+  }
+  @media (pointer: coarse) {
+    #ghtasks-review-proposal .gt-window button, #ghtasks-review-proposal .gt-window summary { min-height: 44px; }
+    #ghtasks-review-proposal .gt-window input:not([type="checkbox"]), #ghtasks-review-proposal .gt-window textarea { font-size: 16px; }
+    #ghtasks-review-proposal .gt-task.gt-short .gt-task-title .gt-fill > button, #ghtasks-review-proposal .gt-task.gt-short .gt-task-status > summary, #ghtasks-review-proposal .gt-view-toggle button { min-height: 44px; }
+    #ghtasks-review-proposal .gt-task-checkbox { width: 40px; height: 44px; }
+  }
+</style>
+<script>
+(() => {
+  const root = document.getElementById('ghtasks-review-proposal');
+  const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const icon = name => `<i data-lucide="${name}" aria-hidden="true"></i>`;
+  const pages = [
+    ['connections','Projects & repositories','Choose what appears in your task list','panels-top-left'],
+    ['appearance','Appearance','Window height and list density','sliders-horizontal'],
+    ['notifications','Notifications','Desktop alerts and GitHub read status','bell'],
+    ['general','General','Startup, refresh and new issue defaults','settings-2'],
+    ['updates','About & updates','Version, update channel and your account','circle-help']
+  ];
+  const statuses = [
+    {name:'Backlog',color:'backlog'}, {name:'Todo',color:'todo'},
+    {name:'In progress',color:'progress'}, {name:'In review',color:'review'},
+    {name:'Done',color:'done'}
+  ];
+  const initialConnections = [
+    {id:'roadmap',name:'Product Roadmap',repo:'acme · Project #3',kind:'project',enabled:true},
+    {id:'assigned',name:'My open issues',repo:'acme/webapp',kind:'repo',enabled:true},
+    {id:'personal',name:'Side project',repo:'rileydev/notes',kind:'repo',enabled:false}
+  ];
+  const tasks = [
+    {id:284,title:'Payments: retry failed Stripe webhooks',repo:'acme/webapp',status:'In progress',meta:'Updated 12m ago',pr:'Open PR #501',attention:'Mentioned you',mine:true,labels:['bug','payments'],milestone:'v1.4',priority:'High'},
+    {id:277,title:'Dark mode across the dashboard',repo:'acme/webapp',status:'In review',meta:'Updated 35m ago',pr:'Draft PR #498',attention:'Review requested',mine:true,labels:['enhancement']},
+    {id:262,title:'Onboarding: skip tour for returning users',repo:'acme/webapp',status:'Todo',meta:'Updated 1h ago',pr:'',attention:'',mine:true,labels:['ux']},
+    {id:233,title:'Rate-limit the public API',repo:'acme/webapp',status:'Backlog',meta:'Updated 2h ago',pr:'',attention:'Assigned to you',mine:true,labels:['security'],priority:'High'},
+    {id:215,title:'Flaky test: checkout e2e times out on CI',repo:'acme/webapp',status:'Todo',meta:'Updated 3h ago',pr:'',attention:'',mine:true,labels:['flaky','ci']},
+    {id:229,title:'Ship the mobile responsive navigation',repo:'acme/webapp',status:'Done',meta:'Updated 4h ago',pr:'Merged PR #480',attention:'',mine:true,labels:['mobile']},
+    {id:290,title:'Document the public API error responses',repo:'acme/webapp',status:'Backlog',meta:'Updated 5h ago',pr:'',attention:'',mine:true,labels:['docs'],priority:'Low'},
+    {id:301,title:'Add a keyboard shortcut to jump to Inbox',repo:'acme/webapp',status:'Todo',meta:'Updated 6h ago',pr:'',attention:'',mine:true,labels:['keyboard','ux']},
+    {id:240,title:'Migrate search to the new index cluster',repo:'acme/webapp',status:'In progress',meta:'Updated 2h ago',pr:'Merged PR #495',attention:'',mine:true,labels:['infra','tech-debt'],milestone:'v1.4'},
+    {id:310,title:'Show webhook retry history to support',repo:'acme/webapp',status:'In progress',meta:'Updated 3h ago',pr:'Open PR #506',attention:'',mine:true,labels:['payments','support'],milestone:'v1.4'},
+    {id:299,title:'Save filters across app restarts',repo:'acme/webapp',status:'In review',meta:'Updated 2h ago',pr:'Open PR #503',attention:'',mine:true,labels:['enhancement','filters']},
+    {id:287,title:'Improve keyboard navigation in dropdowns',repo:'acme/webapp',status:'Done',meta:'Updated 5h ago',pr:'Merged PR #488',attention:'',mine:true,labels:['keyboard','accessibility']},
+    {id:312,title:'Write release notes for the next milestone',repo:'acme/webapp',status:'Todo',meta:'Updated 7h ago',pr:'',attention:'',mine:false,labels:['docs'],priority:'Low'}
+  ];
+  const instances = [];
+  for (const app of root.querySelectorAll('.gt-window')) {
+    const design = app.dataset.design;
+    const previous = window.openai?.widgetState?.privateContent?.[design];
+    const saved = previous?.revision===3 ? previous : {};
+    const s = {revision:3,screen:'list',tab:'projects',density:'default',height:'tall',theme:'system',content:'Populated',search:'',mine:true,projectSource:'All',projectPriority:'All',unreadOnly:false,read:[],closed:[],pendingClose:null,collapsedBuckets:[],cardViews:{projects:'tall',issues:'tall',inbox:'tall'},status:{},created:[],comments:{},notificationSync:false,permission:true,autostart:true,beta:false,refresh:'90 seconds',defaultRepo:'Ask each time',toast:'',sourceKind:'project',sourceName:'',sourceRepo:'Product Roadmap',sourcePreset:'My open issues',sourceQuery:'-status:Released',sourceAlerts:false,sourceColor:'#4f8cff',draftTitle:'',draftBody:'',draftProject:'No project',draftRepo:'acme/webapp',draftAssign:true,detailId:284,connections:structuredClone(initialConnections),...saved};
+    s.connections = Array.isArray(s.connections) ? s.connections : structuredClone(initialConnections);
+    const model = {theme:s.theme,density:s.density,content:s.content,permission:s.permission};
+    instances.push({design,s,model,render});
+    const uid = key => `${design}-${key}`;
+    const button = (label,action,cl='',attrs='') => `<button type="button" class="cursor-interaction ${cl}" data-a="${action}" ${attrs}>${label}</button>`;
+    const optionButtons = (key,values) => `<div class="gt-options" role="group" aria-label="${esc(key)}">${values.map(([value,label])=>button(esc(label),'set','',`data-key="${key}" data-value="${esc(value)}" aria-pressed="${s[key]===value}"`)).join('')}</div>`;
+    const choice = (key,label,values) => `<div class="gt-field"><label id="${uid(key)}-label">${esc(label)}</label><details class="gt-choice"><summary class="cursor-interaction" aria-labelledby="${uid(key)}-label ${uid(key)}-value"><span id="${uid(key)}-value">${esc(s[key])}</span>${icon('chevron-down')}</summary><div class="gt-choice-menu">${values.map(v=>button(esc(v),'set','',`data-key="${key}" data-value="${esc(v)}"`)).join('')}</div></details></div>`;
+    const toggle = (key,label,hint) => `<div class="gt-toggle"><label for="${uid(key)}">${esc(label)}<span class="gt-sub">${esc(hint)}</span></label><input id="${uid(key)}" type="checkbox" data-key="${key}" ${s[key]?'checked':''}></div>`;
+    const input = (key,label,placeholder='') => `<div class="gt-field"><label for="${uid(key)}">${esc(label)}</label><input id="${uid(key)}" data-key="${key}" value="${esc(s[key])}" placeholder="${esc(placeholder)}"></div>`;
+    function persist() {
+      if (!window.openai?.setWidgetState) return;
+      const privateContent = Object.fromEntries(instances.map(i=>{const snapshot={...i.s};delete snapshot.toast;return [i.design,snapshot];}));
+      const modelContent = Object.fromEntries(instances.map(i=>[i.design,{page:i.s.screen,tab:i.s.tab,cardViews:i.s.cardViews,density:i.s.density,theme:i.s.theme,scenario:i.s.content}]));
+      window.openai.setWidgetState({modelContent,privateContent}).catch(()=>{});
+    }
+    function header(title,sub,back='settings') {
+      return `<div class="gt-header">${button(`${icon('arrow-left')} ${back==='list'?'Back to tasks':back==='connections'?'Projects & repositories':'Settings'}`,'back','gt-quiet gt-back',`data-back="${back}"`)}<h1>${esc(title)}</h1>${sub?`<p class="gt-sub">${esc(sub)}</p>`:''}</div>`;
+    }
+    function connectionContent() {
+      const cs = s.content==='No connections'?[]:s.connections;
+      return `<div class="gt-between"><h2>Your connections <span class="gt-muted">${cs.length}</span></h2>${button(`${icon('plus')} Add`,'add-source','gt-primary')}</div>
+        ${!cs.length?`<div class="gt-empty">${icon('panels-top-left')}<h2>Bring your GitHub work here</h2><p>Connect a project board for Projects, or a repository for Todos.</p>${button('Connect a project','add-source','gt-primary')}</div>`:cs.map(c=>`<div class="gt-connection">${icon(c.kind==='project'?'panels-top-left':'folder-git-2')}<div class="gt-fill"><h3>${esc(c.name)}</h3><p class="gt-sub">${esc(c.repo)}</p><span class="gt-status ${c.enabled?'':'gt-paused'}">${icon(c.enabled?'circle-check':'pause')}${c.enabled?'Active':'Paused'}</span></div>${button('Manage','edit-source','',`data-id="${c.id}" aria-label="Manage ${esc(c.name)}"`)}</div>`).join('')}
+        <p class="gt-sub" style="margin-top:14px">Project boards appear in Projects. Repository searches appear in Todos.</p>`;
+    }
+    function appearanceContent() {
+      return `<div class="gt-field"><label>Window height</label>${optionButtons('height',[['tall','Full height · 760 px'],['short','Compact height · 560 px']])}<p class="gt-sub">Both options keep the same 480 px width.</p></div><div class="gt-height-preview"><div class="gt-mini-window" style="height:${s.height==='tall'?108:80}px" aria-hidden="true"><span></span><span></span><span></span><span></span></div><p class="gt-small gt-muted">${s.height==='tall'?'Full height · 480 × 760':'Compact height · 480 × 560'}<br>${s.height==='tall'?'More tasks visible at once.':'Takes up less screen space.'}</p></div>
+        <div class="gt-field"><label>List density</label>${optionButtons('density',[['compact','Compact'],['default','Default'],['comfortable','Comfortable'],['spacious','Spacious']])}</div>
+        <div class="gt-eyebrow">Live preview</div><div class="gt-preview"><div class="gt-between"><h3>Payments: retry failed Stripe webhooks</h3><span class="gt-chip">In progress</span></div><p class="gt-sub">acme/webapp #284 · Updated 12m ago</p><p class="gt-sub">${icon('git-pull-request')} Open PR #501 · payments</p></div>
+        <p class="gt-sub" style="margin-top:12px">Your task list uses this spacing immediately.</p>`;
+    }
+    function notificationsContent() {
+      return `<div class="gt-note ${s.permission?'gt-good':'gt-warning'}"><h3>${icon(s.permission?'circle-check':'bell-off')} ${s.permission?'Desktop notifications are allowed':'Desktop notifications are turned off'}</h3><p>${s.permission?'Review requests, mentions and replies can appear as desktop alerts.':'Allow GitHub Tasks in your system notification settings to receive alerts.'}</p>${!s.permission?button('Open notification settings','permission'):''}</div>
+        <h2 class="gt-section-title">GitHub read status</h2>${toggle('notificationSync','Mark notifications read when I open an item','Opening or clearing a needs-response cue in Projects or Todos also marks its GitHub notification read.')}
+        <p class="gt-sub" style="margin-top:10px">Inbox’s “Mark read” always updates GitHub, whatever this setting.</p>
+        <h2 class="gt-section-title">Repository alerts</h2><p class="gt-sub">Choose alerts for new matching issues inside each repository connection.</p>${button('Manage repository alerts →','page','gt-link','data-page="connections"')}`;
+    }
+    function generalContent() {
+      return `${choice('defaultRepo','Create new issues in',['Ask each time','acme/webapp','rileydev/notes'])}
+        ${choice('refresh','Refresh automatically',['30 seconds','60 seconds','90 seconds','5 minutes','15 minutes'])}
+        <p class="gt-sub" style="margin:-10px 0 12px">Refresh is also available at the bottom of your task list.</p>
+        ${toggle('autostart','Open GitHub Tasks when I sign in','Keep your tasks one click away in the menu bar or system tray.')}`;
+    }
+    function updatesContent() {
+      return `<div class="gt-between"><div><h2>GitHub Tasks</h2><p class="gt-sub">Version 0.6.2</p></div>${button('Check for updates','check-updates')}</div>
+        ${toggle('beta','Receive beta updates','Try features before the stable release. Betas may be less reliable.')}
+        ${s.beta?'<div class="gt-note gt-warning">Turning this off returns you to stable when a newer stable version is released.</div>':''}
+        <h2 class="gt-section-title">GitHub account</h2><div class="gt-row" style="margin-top:14px"><span class="gt-avatar">RD</span><div class="gt-fill"><h3>Riley</h3><p class="gt-sub">@rileydev</p></div>${button('Sign out','signout','gt-quiet')}</div>
+        <div class="gt-note"><h3>Your account stays yours</h3><p>Your sign-in token is stored securely on this device. Your issues and projects stay on GitHub.</p></div>
+        <div class="gt-row">${button('Release notes ↗','release-notes','gt-link')}${button('Report an issue ↗','report-issue','gt-link')}</div>
+        <details class="gt-disclosure"><summary class="cursor-interaction">Help & diagnostics</summary><div class="gt-group-body"><p class="gt-small gt-muted">Connection problems? Check organization access and SSO authorization on GitHub, then retry.</p>${button('Copy diagnostic summary','diagnostics','gt-link')}</div></details>`;
+    }
+    const contents = {connections:connectionContent,appearance:appearanceContent,notifications:notificationsContent,general:generalContent,updates:updatesContent};
+    function settings() {
+      return `${header('Settings','Make GitHub Tasks work for you.','list')}<div class="gt-content"><div class="gt-home">${pages.map(([key,title,sub,ico])=>button(`<span class="gt-home-icon">${icon(ico)}</span><span class="gt-fill"><h2>${esc(title)}</h2><span class="gt-sub">${esc(sub)}</span></span>${icon('chevron-right')}`,'page','',`data-page="${key}"`)).join('')}</div></div>`;
+    }
+    function source() {
+      const editing = s.connections.find(c=>c.id===s.editingId);
+      return `${header(editing?'Manage connection':'Add a connection',editing?'Choose how this connection appears.':'Start with the GitHub work you want to follow.','connections')}<div class="gt-content">
+        ${!editing?`<div class="gt-field"><label>What would you like to connect?</label>${optionButtons('sourceKind',[['project','Project board'],['repo','Repository']])}</div>`:''}
+        ${choice('sourceRepo',s.sourceKind==='project'?'Project board':'Repository',s.sourceKind==='project'?['Product Roadmap','Engineering backlog']:['acme/webapp','rileydev/notes'])}
+        ${s.sourceKind==='repo'?choice('sourcePreset','Which issues?',['My open issues','All open issues','Issues I opened','Open bugs','PRs awaiting my review']):'<div class="gt-note">Items appear in Projects with their status. Released items are hidden by default.</div>'}
+        ${input('sourceName','Display name','Use the project or repository name')}
+        <details class="gt-disclosure"><summary class="cursor-interaction">More options</summary><div class="gt-group-body">${input('sourceQuery',s.sourceKind==='project'?'Filter project items':'Custom GitHub search')}<p class="gt-sub">Keep the default, or use GitHub search syntax.</p><div class="gt-field" style="margin-top:14px"><label for="${uid('color')}">Connection color</label><input id="${uid('color')}" type="color" data-key="sourceColor" value="${esc(s.sourceColor)}" aria-label="Connection color"></div>${s.sourceKind==='repo'?toggle('sourceAlerts','Desktop alerts for new matching issues','Separate from review, mention and reply alerts.'):''}</div></details>
+        ${editing?`${toggle('sourceEnabled','Show in my task list','Turn off to pause this connection without removing it.')}<details class="gt-disclosure"><summary class="cursor-interaction">Remove connection</summary><div class="gt-group-body"><p class="gt-small gt-muted">This removes the connection from GitHub Tasks. Your GitHub issues and project are kept.</p>${button('Remove connection','remove-source','gt-danger',`data-id="${editing.id}"`)}</div></details>`:`<p class="gt-sub" style="margin-top:14px">Can’t find your ${s.sourceKind==='project'?'project':'repository'}? Check organization access on GitHub, then try again.</p>`}
+        <div class="gt-actions">${button('Cancel','page','','data-page="connections"')}${button(editing?'Save changes':s.sourceKind==='project'?'Add project':'Add repository','save-source','gt-primary')}</div></div>`;
+    }
+    function projectCard(t) {
+      const status=s.status[t.id]||t.status;
+      const color=statuses.find(x=>x.name===status)?.color||'backlog';
+      const prColor=t.pr.startsWith('Merged')?'light-dark(#8144b9, #a371f7)':t.pr.startsWith('Draft')?'light-dark(#586576, #8b949e)':'light-dark(#21734e, #3fb950)';
+      const pr=t.pr?`${button(`${icon('git-pull-request')} ${esc(t.pr.replace(/^(Open|Merged|Draft) /,''))}`,'github','gt-project-pr',`style="--gt-project-pr-color:${prColor}" data-tooltip="${esc(t.pr)}"`)}<span class="gt-project-sep">·</span>`:'';
+      const statusPicker=`<details class="gt-choice gt-task-status gt-project-status"><summary class="cursor-interaction" aria-label="Change status for ${esc(t.title)}">${esc(status)}<span aria-hidden="true">▾</span></summary><div class="gt-choice-menu">${statuses.map(({name})=>button(name,'set-status','',`data-id="${t.id}" data-value="${name}"`)).join('')}</div></details>`;
+      const comment=s.projectCommentId===t.id?`<div class="gt-project-comment"><textarea data-key="projectCommentText" aria-label="Comment on ${esc(t.title)}" placeholder="Add a comment…">${esc(s.projectCommentText||'')}</textarea><div class="gt-actions">${button('Cancel','project-comment-cancel')}${button('Comment','project-comment-submit','gt-primary',`data-id="${t.id}" ${s.projectCommentText?.trim()?'':'disabled'}`)}</div></div>`:'';
+      return `<article class="gt-project-card" data-issue-id="${t.id}" data-density="${s.density}" style="--gt-status-color:var(--gt-${color})">
+        <div class="gt-project-line1">${button(esc(t.title),'github','gt-project-title',`data-id="${t.id}" data-tooltip="${esc(t.title)}"`)}<div class="gt-project-right"><div class="gt-project-tray">${button(icon('message-circle'),'project-comment','',`data-id="${t.id}" aria-label="Add comment to ${esc(t.title)}"`)}${button(icon('arrow-up-right'),'github','','aria-label="Open on GitHub"')}${button(icon('chevron-right'),'detail','',`data-id="${t.id}" aria-label="View issue: ${esc(t.title)}"`)}</div>${statusPicker}</div></div>
+        <div class="gt-project-line2">${pr}<span class="gt-project-repo">${esc(t.repo)} #${t.id}</span><span class="gt-project-sep">·</span><span class="gt-project-time">${esc(t.meta.replace(/^Updated /,''))}</span>${s.closed.includes(t.id)?'<span>· Closed</span>':''}</div>
+        ${(t.labels?.length||t.milestone)?`<div class="gt-project-line3">${t.milestone?button(esc(t.milestone),'github','',`data-tooltip="Milestone: ${esc(t.milestone)}"`):''}${(t.labels||[]).map(label=>`<span>${esc(label)}</span>`).join('')}</div>`:''}${comment}</article>`;
+    }
+    function taskCard(t,view) {
+      const short=view==='short';
+      if(s.tab==='projects'&&!short)return projectCard(t);
+      const isTodo=s.tab==='issues';
+      const isInbox=s.tab==='inbox';
+      const status=s.status[t.id]||t.status;
+      const title=button(esc(t.title),s.tab==='projects'?'github':'detail','gt-quiet',`data-id="${t.id}" data-tooltip="${esc(t.title)}"`);
+      const checkbox=isTodo?`<label class="gt-task-checkbox cursor-interaction"><input id="${uid('close-'+t.id)}" type="checkbox" data-close-id="${t.id}" aria-label="Close issue: ${esc(t.title)}"></label>`:'';
+      const statusPicker=s.tab==='projects'?`<details class="gt-choice gt-task-status"><summary class="cursor-interaction" aria-label="Change status for ${esc(t.title)}" data-tooltip="Change status: ${esc(status)}">${short?'':esc(status)} ${icon(short?'chevrons-up-down':'chevron-down')}</summary><div class="gt-choice-menu">${statuses.map(({name})=>button(name,'set-status','',`data-id="${t.id}" data-value="${name}"`)).join('')}</div></details>`:'';
+      const readAction=isInbox&&!s.read.includes(t.id)?button(short?icon('mail-check'):'Mark read','read',short?'gt-quiet gt-short-action':'',`data-id="${t.id}" aria-label="Mark read"`):'';
+      const pr=t.pr?`<span class="gt-pr ${t.pr.startsWith('Merged')?'gt-merged':t.pr.startsWith('Draft')?'gt-draft':''}">${icon('git-pull-request')} ${esc(t.pr)}</span>`:'';
+      const needsResponse=t.attention&&t.attention!=='Assigned to you';
+      const signal=isInbox?`<span class="gt-small ${needsResponse?'gt-attention':'gt-muted'}">${s.read.includes(t.id)?'Read':'Unread'} · ${esc(t.attention)}</span>`:needsResponse?`<span class="gt-attention">${icon('message-circle')} ${esc(t.attention)}</span>`:'';
+      const confirming=isTodo&&s.pendingClose===t.id?`<div class="gt-close-confirm" role="group" aria-label="Confirm closing issue"><h3>Close this issue?</h3><p>This closes ${esc(t.repo)} #${t.id} on GitHub. Its project status stays the same.</p><div class="gt-actions">${button('Cancel','cancel-close','',`data-id="${t.id}"`)}${button('Close issue','confirm-close','gt-primary',`data-id="${t.id}"`)}</div></div>`:'';
+      return `<article class="gt-task ${short?'gt-short':''} ${isTodo?'gt-todo':''}" data-issue-id="${t.id}">
+        <div class="gt-task-title">${checkbox}<div class="gt-fill">${title}</div>${short?`<span class="gt-inline-number">#${t.id}</span>`:''}${statusPicker}${short?readAction:''}</div>
+        ${short?'':`<div class="gt-meta"><span>${esc(t.repo)} #${t.id}</span><span>·</span><span>${esc(t.meta)}</span>${s.closed.includes(t.id)?'<span>· Closed issue</span>':''}</div><div class="gt-task-bottom"><span class="gt-row">${signal}${pr}</span>${readAction||button(`${icon('arrow-up-right')} GitHub`,'github','gt-quiet')}</div>`}
+        ${confirming}</article>`;
+    }
+    function list() {
+      const isInbox=s.tab==='inbox';
+      const view=s.cardViews[s.tab]||'tall';
+      let visible=[...s.created,...tasks].filter(t=>
+        (isInbox?Boolean(t.attention):!s.mine||t.mine)&&
+        (s.tab!=='issues'||!s.closed.includes(t.id))&&
+        (s.tab!=='projects'||t.project!==null)&&
+        `${t.title} ${t.repo} #${t.id} ${(t.labels||[]).join(' ')}`.toLowerCase().includes(s.search.toLowerCase()));
+      if(isInbox&&s.unreadOnly)visible=visible.filter(t=>!s.read.includes(t.id));
+      if(s.tab==='projects'&&s.listStatus&&s.listStatus!=='All')visible=visible.filter(t=>(s.status[t.id]||t.status)===s.listStatus);
+      if(s.tab==='projects'){
+        if(s.projectSource!=='All')visible=visible.filter(t=>(t.project||'Product Roadmap')===s.projectSource);
+        if(s.projectPriority!=='All')visible=visible.filter(t=>(t.priority||'Medium')===s.projectPriority);
+        visible.sort((a,b)=>statuses.findIndex(x=>x.name===(s.status[a.id]||a.status))-statuses.findIndex(x=>x.name===(s.status[b.id]||b.status)));
+      }
+      const noConnections=!isInbox&&s.content==='No connections';
+      let cards='';
+      if(noConnections)cards=`<div class="gt-empty">${icon('panels-top-left')}<h2>${s.tab==='projects'?'Connect your first project':'Connect your first repository'}</h2><p>Choose where your work lives. We’ll bring it into this list.</p>${button('Choose a connection','page','gt-primary','data-page="connections"')}</div>`;
+      else if(!visible.length)cards=`<div class="gt-empty">${icon('circle-check')}<h2>${s.tab==='issues'&&!s.search?'You’re all caught up':'No matches'}</h2><p>${s.tab==='issues'&&!s.search?'No open issues match this view.':'Try a different search or clear your filters.'}</p>${button('Clear filters','clear-filter')}</div>`;
+      else if(s.tab==='projects'&&view==='short')cards=statuses.map(({name,color})=>{
+        const items=visible.filter(t=>(s.status[t.id]||t.status)===name);
+        if(!items.length)return '';
+        return `<details class="gt-bucket" data-bucket="${name}" style="--gt-status-color:var(--gt-${color})" ${s.collapsedBuckets.includes(name)?'':'open'}><summary class="cursor-interaction" aria-label="${name}, ${items.length} ${items.length===1?'issue':'issues'}"><span class="gt-status-dot" aria-hidden="true"></span><span>${name}</span><span class="gt-bucket-count">${items.length}</span><span class="gt-bucket-caret">${icon('chevron-down')}</span></summary>${items.map(t=>taskCard(t,view)).join('')}</details>`;
+      }).join('');
+      else cards=visible.map(t=>taskCard(t,view)).join('');
+      const viewToggle=`<div class="gt-view-toggle" role="group" aria-label="Card layout">${button(`${icon('list')} Compact`,'card-view','',`data-value="short" aria-pressed="${view==='short'}"`)}${button(`${icon('rows-3')} Expanded`,'card-view','',`data-value="tall" aria-pressed="${view==='tall'}"`)}</div>`;
+      if(s.tab==='projects')return `<div class="gt-project-zone">
+        <div class="gt-project-search"><input data-key="search" aria-label="Search tasks" placeholder="Filter by title, label, or #number…" value="${esc(s.search)}">${button('+ New','new','gt-primary','aria-label="New issue"')}</div>
+        <div class="gt-project-filterbar"><div class="gt-project-mine" role="group" aria-label="Assignee filter">${button('Mine','mine','',`aria-pressed="${s.mine}"`)}${button('All','everyone','',`aria-pressed="${!s.mine}"`)}</div>
+        <details class="gt-choice gt-project-filter"><summary class="cursor-interaction">Projects: ${esc(s.projectSource)} ▾</summary><div class="gt-choice-menu">${['All','Product Roadmap'].map(v=>button(v,'project-source','',`data-value="${v}"`)).join('')}</div></details>
+        <details class="gt-choice gt-project-filter"><summary class="cursor-interaction">Status: ${esc(s.listStatus||'All')} ▾</summary><div class="gt-choice-menu">${['All',...statuses.map(x=>x.name)].map(v=>button(v,'list-status','',`data-value="${v}"`)).join('')}</div></details>
+        <details class="gt-choice gt-project-filter"><summary class="cursor-interaction">${s.projectPriority==='All'?'Filter by…':'Priority: '+esc(s.projectPriority)} ▾</summary><div class="gt-choice-menu">${['All','High','Medium','Low'].map(v=>button('Priority: '+v,'project-priority','',`data-value="${v}"`)).join('')}</div></details></div>
+        <div class="gt-project-viewbar"><span>${visible.length} issues${view==='short'?' · Grouped by status':''}${s.listStatus&&s.listStatus!=='All'||s.projectPriority!=='All'||s.search?` · ${button('Clear filters','clear-filter','gt-link')}`:''}</span>${viewToggle}</div>
+        ${s.content==='Sync error'?`<div class="gt-note gt-warning gt-banner"><h3>Couldn’t sync with GitHub</h3><p>Showing your last saved tasks.</p>${button('Try again','retry')}</div>`:''}
+        <div class="gt-list ${view==='tall'?'gt-project-flat':''}" data-card-view="${view}">${cards}</div></div>`;
+      return `<div class="gt-tools"><input data-key="search" aria-label="${isInbox?'Search loaded notifications':'Search tasks'}" placeholder="${isInbox?'Search loaded notifications…':'Search title, repository or number…'}" value="${esc(s.search)}">${isInbox?button(s.markAllArmed?'Confirm mark all read':'Mark all read','mark-all'):button(`${icon('plus')} New issue`,'new','gt-primary')}</div>
+        <div class="gt-list-toolbar"><div class="gt-filters">${isInbox?button('Unread only','unread','',`aria-pressed="${s.unreadOnly}"`):button('Assigned to me','mine','',`aria-pressed="${s.mine}"`)+button('Everyone','everyone','',`aria-pressed="${!s.mine}"`)}<span class="gt-small gt-muted">${visible.length} ${isInbox?'notifications':'issues'}</span></div>${viewToggle}</div>
+        ${s.content==='Sync error'?`<div class="gt-note gt-warning gt-banner"><h3>Couldn’t sync with GitHub</h3><p>Showing your last saved tasks. Your latest changes may be missing.</p>${button('Try again','retry')}</div>`:''}
+        <div class="gt-list" data-card-view="${view}">${cards}</div>`;
+    }
+    function detail() {
+      const t=[...s.created,...tasks].find(t=>t.id===s.detailId)||tasks[0];
+      const state=s.tab==='projects'?(s.status[t.id]||t.status):(s.closed.includes(t.id)?'Closed':'Open');
+      return `${header(t.title,`${t.repo} #${t.id}`,'list')}<div class="gt-content"><div class="gt-between"><span class="gt-chip">${esc(state)}</span>${button(`${icon('arrow-up-right')} Open on GitHub`,'github','gt-quiet')}</div><div class="gt-article"><p>${esc(t.body||({'284':'Retry failed webhook deliveries safely, without creating duplicate payments.','277':'Apply accessible light and dark colors throughout the dashboard.','262':'Let returning users go straight to their work.','233':'Add sensible rate limits and clear retry messages.','215':'Make the checkout tests deterministic.','229':'The responsive navigation is ready to ship.'}[t.id])||'No description provided.')}</p></div>${!s.created.some(x=>x.id===t.id)?'<div class="gt-eyebrow">Conversation</div><div class="gt-note"><h3>Sam · 12m ago</h3><p>@rileydev Could you take a look before we ship?</p></div>':''}${(s.comments[t.id]||[]).map(c=>`<div class="gt-note"><h3>You · just now</h3><p>${esc(c)}</p></div>`).join('')}<div class="gt-field"><label for="${uid('comment')}">Reply</label><textarea id="${uid('comment')}" data-key="commentDraft" placeholder="Write a comment…">${esc(s.commentDraft||'')}</textarea></div><div class="gt-actions">${button('Comment','comment','gt-primary',s.commentDraft?.trim()?'':'disabled')}</div></div>`;
+    }
+    function newIssue() {
+      return `${header('New issue','Your draft is kept until you create the issue.','list')}<div class="gt-content">${choice('draftRepo','Repository',['acme/webapp','rileydev/notes'])}${input('draftTitle','Title','What needs to be done?')}<div class="gt-field"><label for="${uid('draftBody')}">Description <span class="gt-muted">· optional</span></label><textarea id="${uid('draftBody')}" data-key="draftBody" placeholder="Add context, notes or a checklist…">${esc(s.draftBody)}</textarea></div>${choice('draftProject','Add to project',['No project','Product Roadmap','Engineering backlog'])}<details class="gt-disclosure"><summary class="cursor-interaction">Issue options</summary><div class="gt-group-body">${toggle('draftAssign','Assign to me','@rileydev')}${button('Labels: None','labels')}</div></details><div class="gt-actions">${button('Keep draft & go back','back','','data-back="list"')}${button('Create issue','create','gt-primary',s.draftTitle.trim()?'':'disabled')}</div></div>`;
+    }
+    function signin() {
+      return `${header('Sign in to GitHub','Your work will be here when you return.','settings')}<div class="gt-content"><div class="gt-note"><h3>Enter this code on GitHub</h3><p style="font-size:20px;letter-spacing:3px">ABCD-1234</p>${button('Copy code','copy-code')}</div><p class="gt-sub">Waiting for approval in your browser…</p><div class="gt-actions">${button('Cancel','back','','data-back="settings"')}${button('Get a new code','new-code','gt-primary')}</div></div>`;
+    }
+    function render() {
+      const opened=[...app.querySelectorAll('.gt-disclosure[open]')].map(d=>d.querySelector('summary')?.textContent.trim());
+      const focused=app.contains(document.activeElement)?document.activeElement:null;
+      const focusId=focused?.id;const focusKey=focused?.dataset.key;const focusValue=focused?.dataset.value;
+      app.style.colorScheme=s.theme==='system'?'light dark':s.theme;
+      app.style.setProperty('--gt-row-pad',{compact:'9px',default:'14px',comfortable:'19px',spacious:'24px'}[s.density]||'14px');
+      app.style.setProperty('--gt-project-pad',{compact:'6px',default:'9px',comfortable:'11px',spacious:'15px'}[s.density]||'9px');
+      const inSettings=!['list','detail','new'].includes(s.screen);
+      const unread=tasks.filter(t=>t.attention&&!s.read.includes(t.id)).length;
+      const body=s.screen==='settings'?settings():contents[s.screen]?`${header(pages.find(p=>p[0]===s.screen)[1],pages.find(p=>p[0]===s.screen)[2])}<div class="gt-content">${contents[s.screen]()}</div>`:s.screen==='source'?source():s.screen==='detail'?detail():s.screen==='new'?newIssue():s.screen==='signin'?signin():list();
+      app.innerHTML=`<nav class="gt-nav" aria-label="Main navigation">${[['projects','Projects'],['issues','Todos'],['inbox',`Inbox <span class="gt-count">${unread}</span>`]].map(([tab,label])=>button(label,'tab','',`data-tab="${tab}" aria-pressed="${!inSettings&&s.tab===tab}"`)).join('')}${button(icon('settings'),'settings','gt-settings','aria-label="Settings" aria-pressed="'+inSettings+'"')}</nav>${body}${s.toast?`<div class="gt-toast" role="status">${esc(s.toast)}</div>`:''}<div class="gt-footer"><span role="status">${s.screen==='source'?'Connection changes apply when you save.':s.screen==='new'?'Draft kept on this device.':s.screen==='signin'?'Waiting for GitHub approval.':inSettings?'Changes save automatically · Up to date':s.content==='Sync error'?'Last synced 8 minutes ago':'Synced just now'}</span>${!inSettings?button(`${icon('refresh-cw')} Refresh`,'retry','gt-quiet'):''}</div>`;
+      for(const d of app.querySelectorAll('.gt-disclosure'))if(opened.includes(d.querySelector('summary')?.textContent.trim()))d.open=true;
+      if(globalThis.lucide) lucide.createIcons({attrs:{width:16,height:16}});
+      if(focusId)app.querySelector('#'+CSS.escape(focusId))?.focus();
+      else if(focusKey&&focusValue)app.querySelector(`[data-key="${CSS.escape(focusKey)}"][data-value="${CSS.escape(focusValue)}"]`)?.focus();
+    }
+    function navigate(page) {
+      s.screen=page;s.pendingClose=null;
+    }
+    app.addEventListener('click', event => {
+      const bucket=event.target.closest('.gt-bucket > summary');
+      if(bucket){const name=bucket.parentElement.dataset.bucket;s.collapsedBuckets=bucket.parentElement.open?[...new Set([...s.collapsedBuckets,name])]:s.collapsedBuckets.filter(x=>x!==name);persist();return;}
+      const el=event.target.closest('button[data-a]'); if(!el||el.disabled) return;
+      const a=el.dataset.a;s.toast='';if(a!=='mark-all')s.markAllArmed=false;
+      if(a==='tab'){s.tab=el.dataset.tab;s.screen='list';s.search='';s.listStatus='';s.filterOpen=false;s.pendingClose=null;}
+      else if(a==='settings'){s.screen='settings';s.pendingClose=null;}
+      else if(a==='card-view'){s.cardViews[s.tab]=el.dataset.value;}
+      else if(a==='page'){navigate(el.dataset.page);}
+      else if(a==='back'){navigate(el.dataset.back||'settings');}
+      else if(a==='set'){s[el.dataset.key]=el.dataset.value;s.toast=['theme','density','height','refresh','defaultRepo'].includes(el.dataset.key)?'Preference saved in this preview.':'';if(el.dataset.key==='sourceKind'){s.sourceRepo=s.sourceKind==='project'?'Product Roadmap':'acme/webapp';s.sourceQuery=s.sourceKind==='project'?'-status:Released':'is:issue is:open assignee:@me';}if(el.dataset.key==='sourcePreset')s.sourceQuery={'My open issues':'is:issue is:open assignee:@me','All open issues':'is:issue is:open','Issues I opened':'is:issue is:open author:@me','Open bugs':'is:issue is:open label:bug','PRs awaiting my review':'is:pr is:open review-requested:@me'}[s.sourcePreset];}
+      else if(a==='add-source'){s.screen='source';s.editingId=null;s.sourceName='';s.sourceRepo='Product Roadmap';s.sourceKind='project';s.sourceQuery='-status:Released';s.sourceAlerts=false;}
+      else if(a==='edit-source'){const c=s.connections.find(c=>c.id===el.dataset.id);s.screen='source';s.editingId=c.id;s.sourceName=c.name;s.sourceEnabled=c.enabled;s.sourceKind=c.kind;s.sourceRepo=c.kind==='project'?c.name:c.repo;s.sourceQuery=c.query||(c.kind==='project'?'-status:Released':'is:issue is:open assignee:@me');s.sourceColor=c.color||'#4f8cff';s.sourceAlerts=Boolean(c.alerts);}
+      else if(a==='save-source'){const c={id:s.editingId||'new-'+Date.now(),name:s.sourceName.trim()||s.sourceRepo,repo:s.sourceKind==='project'?'acme · Project #3':s.sourceRepo,kind:s.sourceKind,enabled:s.editingId?s.sourceEnabled:true,query:s.sourceQuery,color:s.sourceColor,alerts:s.sourceAlerts};s.connections=s.editingId?s.connections.map(x=>x.id===c.id?c:x):[...s.connections,c];s.content='Populated';navigate('connections');s.toast='Connection saved in this preview.';}
+      else if(a==='remove-source'){s.removed=s.connections.find(c=>c.id===el.dataset.id);s.connections=s.connections.filter(c=>c.id!==el.dataset.id);navigate('connections');s.toast='Connection removed. GitHub items are kept.';}
+      else if(a==='new'){s.screen='new';}
+      else if(a==='create'){const id=600+s.created.length;s.created.unshift({id,title:s.draftTitle,repo:s.draftRepo,status:'Todo',meta:'Created just now',pr:'',attention:'',mine:s.draftAssign,body:s.draftBody,project:s.draftProject==='No project'?null:s.draftProject});s.detailId=id;s.screen='detail';s.toast='Issue created in this preview.';s.draftTitle='';s.draftBody='';}
+      else if(a==='detail'){s.detailId=Number(el.dataset.id);s.screen='detail';s.pendingClose=null;}
+      else if(a==='set-status'){s.status[Number(el.dataset.id)]=el.dataset.value;s.collapsedBuckets=s.collapsedBuckets.filter(x=>x!==el.dataset.value);s.toast=`Moved to ${el.dataset.value}.`;}
+      else if(a==='project-source'){s.projectSource=el.dataset.value;}
+      else if(a==='project-priority'){s.projectPriority=el.dataset.value;}
+      else if(a==='project-comment'){s.projectCommentId=s.projectCommentId===Number(el.dataset.id)?null:Number(el.dataset.id);s.projectCommentText='';}
+      else if(a==='project-comment-cancel'){s.projectCommentId=null;s.projectCommentText='';}
+      else if(a==='project-comment-submit'){if(!s.projectCommentText?.trim())return;const id=Number(el.dataset.id);s.comments[id]=[...(s.comments[id]||[]),s.projectCommentText.trim()];s.projectCommentId=null;s.projectCommentText='';s.toast='Comment posted in this preview.';}
+      else if(a==='cancel-close'){s.pendingClose=null;}
+      else if(a==='confirm-close'){const id=Number(el.dataset.id);s.closed=[...new Set([...s.closed,id])];s.pendingClose=null;s.toast=`Closed issue #${id} in this preview. Its project status is unchanged.`;}
+      else if(a==='read'){s.read=[...new Set([...s.read,Number(el.dataset.id)])];s.toast='Notification marked read in this preview.';}
+      else if(a==='mark-all'){if(s.markAllArmed){s.read=tasks.map(t=>t.id);s.markAllArmed=false;s.toast='All loaded notifications marked read in this preview.';}else{s.markAllArmed=true;s.toast='Click “Mark all read” again to confirm.';}}
+      else if(a==='mine'){s.mine=true;}else if(a==='everyone'){s.mine=false;}else if(a==='unread'){s.unreadOnly=!s.unreadOnly;}
+      else if(a==='list-status'){s.listStatus=el.dataset.value;}
+      else if(a==='clear-filter'){s.search='';s.listStatus='';s.projectPriority='All';s.projectSource='All';}
+      else if(a==='retry'){s.content='Populated';s.toast='Preview refreshed. Your list is up to date.';}
+      else if(a==='permission'){s.permission=true;s.toast='Preview: notifications allowed. The production action opens system settings.';}
+      else if(a==='check-updates'){s.toast='Preview: you’re on the latest version.';}
+      else if(a==='signout'){s.screen='signin';}
+      else if(a==='new-code'){s.toast='New preview code: WXYZ-5678';}
+      else if(a==='copy-code'){s.toast='Preview code: ABCD-1234';}
+      else if(a==='diagnostics'){s.toast='Preview: GitHub Tasks 0.6.2 · signed in · 3 connections';}
+      else if(a==='comment'){if(!s.commentDraft?.trim())return;s.comments[s.detailId]=[...(s.comments[s.detailId]||[]),s.commentDraft.trim()];s.commentDraft='';s.toast='Comment posted in this preview.';}
+      else if(a==='labels'){s.toast='Preview label: enhancement';}
+      else if(a==='github'){s.toast='Production action: open this item on GitHub.';}
+      else if(a==='release-notes'){s.toast='Production action: open GitHub release notes.';}
+      else if(a==='report-issue'){s.toast='Production action: open the GitHub issue form.';}
+      render();persist();
+      if(a==='set')app.querySelector(`[aria-labelledby^="${uid(el.dataset.key)}-label"]`)?.focus();
+      if(a==='card-view')app.querySelector(`[data-a="card-view"][data-value="${el.dataset.value}"]`)?.focus();
+      if(a==='cancel-close')app.querySelector(`[data-close-id="${el.dataset.id}"]`)?.focus();
+      if(a==='confirm-close')(app.querySelector('[data-close-id]')||app.querySelector('.gt-tools input'))?.focus();
+      if(a==='set-status')app.querySelector(`[data-issue-id="${el.dataset.id}"] .gt-task-status > summary`)?.focus();
+      if(a==='project-comment')app.querySelector('.gt-project-comment textarea')?.focus();
+      if(['tab','settings','page','back','new','add-source','edit-source','detail','save-source'].includes(a)) app.querySelector('.gt-back, .gt-tools input, .gt-home button')?.focus();
+    });
+    app.addEventListener('input',event=>{
+      if(event.target.dataset.closeId){const id=Number(event.target.dataset.closeId);event.target.checked=false;s.pendingClose=s.pendingClose===id?null:id;render();persist();app.querySelector(`[data-a="cancel-close"][data-id="${id}"]`)?.focus();return;}
+      const key=event.target.dataset.key;if(!key)return;s[key]=event.target.type==='checkbox'?event.target.checked:event.target.value;
+      if(key==='search'){const at=event.target.selectionStart;render();const field=app.querySelector('[data-key="search"]');field.focus();field.setSelectionRange(at,at);}
+      if(key==='draftTitle'){const create=app.querySelector('[data-a="create"]');if(create)create.disabled=!s.draftTitle.trim();}
+      if(key==='commentDraft'){const submit=app.querySelector('[data-a="comment"]');if(submit)submit.disabled=!s.commentDraft.trim();}
+      if(key==='projectCommentText'){const submit=app.querySelector('[data-a="project-comment-submit"]');if(submit)submit.disabled=!s.projectCommentText.trim();}
+      if(event.target.type==='checkbox'){s.toast='Preference saved in this preview.';render();}
+      persist();
+    });
+    app.addEventListener('toggle',event=>{
+      const picker=event.target;if(!picker.matches?.('.gt-task-status')||!picker.open)return;
+      for(const other of app.querySelectorAll('.gt-task-status[open]'))if(other!==picker)other.open=false;
+      const menu=picker.querySelector('.gt-choice-menu');const box=picker.getBoundingClientRect();
+      const needed=menu.getBoundingClientRect().height+8;const bounds=app.getBoundingClientRect();
+      picker.dataset.placement=bounds.bottom-box.bottom<needed&&box.top-bounds.top>needed?'above':'below';
+    },true);
+    app.addEventListener('keydown',event=>{if(event.key!=='Escape')return;if(s.pendingClose!==null){const id=s.pendingClose;s.pendingClose=null;render();persist();app.querySelector(`[data-close-id="${id}"]`)?.focus();event.preventDefault();return;}const open=event.target.closest('details[open]:not(.gt-bucket)');if(open){open.open=false;open.querySelector('summary').focus();event.preventDefault();event.stopPropagation();return;}if(s.screen!=='list'){navigate(s.screen==='settings'?'list':s.screen==='new'||s.screen==='detail'?'list':'settings');render();persist();app.querySelector('.gt-back,.gt-tools input,.gt-home button')?.focus();}});
+    render();
+    if(globalThis.Tweak){const tweak=new Tweak({container:app,onChange:()=>{s.theme=model.theme;s.density=model.density;s.content=model.content;s.permission=model.permission;render();persist();}});tweak.addSelect(model,'theme',{label:'Appearance',options:['system','light','dark']});tweak.addSelect(model,'density',{label:'Row density',options:['compact','default','comfortable','spacious']});tweak.addSelect(model,'content',{label:'Content state',options:['Populated','No connections','Sync error']});tweak.addToggle(model,'permission',{label:'System allows desktop alerts'});}
+  }
+  window.addEventListener('openai:set_globals',event=>{const saved=event.detail?.globals?.widgetState?.privateContent;if(!saved)return;for(const i of instances){if(saved[i.design]){Object.assign(i.s,saved[i.design]);Object.assign(i.model,{theme:i.s.theme,density:i.s.density,content:i.s.content,permission:i.s.permission});i.render();}}});
+})();
+</script>

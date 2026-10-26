@@ -1,4 +1,5 @@
 import { test, expect } from "./fixtures/app";
+import { makeIssue } from "./fixtures/mockData";
 
 // Two repos, each with a distinct markdown template. Switching repos must
 // reset the body "touched" flag so a newly-picked template applies its body
@@ -76,9 +77,7 @@ test.describe("New Issue — template application across repo switch", () => {
 
     await page.getByRole("button", { name: "+ New" }).click();
     const dialog = page.getByRole("dialog", { name: "New issue" });
-    // Repo-only mode keeps the form simple (no project picker). Modal opens
-    // already defaulted to repo A via default_repo.
-    await dialog.getByRole("button", { name: "Repo only" }).click();
+    // Repository-first creation opens with the configured default repository.
 
     const bodyField = dialog.getByPlaceholder("Notes, checklist…");
 
@@ -100,5 +99,53 @@ test.describe("New Issue — template application across repo switch", () => {
     await selectTrigger(dialog, /Blank \(no template\)/).click();
     await page.getByRole("option", { name: "Repo B bug" }).click();
     await expect(bodyField).toHaveValue("BODY FROM REPO B TEMPLATE");
+  });
+
+  test("restoring a form draft keeps its values, labels, and title after templates load", async ({ mountApp, page }) => {
+    await mountApp({
+      createdIssue: makeIssue({ number: 995, title: "Persistent form issue", node_id: "FORM_995" }),
+      issueTemplates: {
+        blank_issues_enabled: false,
+        templates: [{
+          kind: "form", filename: "bug.yml", name: "Bug report", description: "Report a bug", title: "[Bug] ", labels: ["bug"], assignees: ["@me", "maintainer"],
+          body: [
+            { type: "input", id: "summary", label: "Summary", description: null, placeholder: "What happened?", default_value: "", required: true },
+            { type: "checkboxes", id: "checks", label: "Checklist", description: null, options: [{ label: "I searched existing issues", required: true }] },
+          ],
+        }],
+      },
+    });
+    const opener = page.getByRole("button", { name: "+ New", exact: true });
+    await opener.click();
+    const dialog = page.getByRole("dialog", { name: "New issue", exact: true });
+    await expect(dialog.getByRole("button", { name: "Issue template", exact: true })).toHaveText(/Bug report/);
+    await dialog.getByPlaceholder("What needs to be done?").fill("Persistent form issue");
+    await dialog.getByRole("button", { name: "Create issue", exact: true }).click();
+    await expect(dialog.getByRole("alert")).toContainText("Summary is required");
+    await dialog.getByPlaceholder("What happened?").fill("The page will not load");
+    await dialog.getByRole("checkbox", { name: /I searched existing issues/ }).check();
+    await dialog.locator("summary").filter({ hasText: "Issue options" }).click();
+    await dialog.getByRole("button", { name: "Labels", exact: true }).click();
+    await dialog.getByRole("dialog", { name: "Labels filters", exact: true }).getByRole("checkbox", { name: "enhancement", exact: true }).check();
+    await page.keyboard.press("Escape");
+    await dialog.getByRole("button", { name: "Keep draft & go back", exact: true }).click();
+    await opener.click();
+    await expect(dialog.getByPlaceholder("What happened?")).toHaveValue("The page will not load");
+    await expect(dialog.getByRole("checkbox", { name: /I searched existing issues/ })).toBeChecked();
+    await page.reload();
+    await opener.click();
+    await expect(dialog.getByRole("button", { name: "Issue template", exact: true })).toHaveText(/Bug report/);
+    await expect(dialog.getByPlaceholder("What needs to be done?")).toHaveValue("Persistent form issue");
+    await expect(dialog.getByPlaceholder("What happened?")).toHaveValue("The page will not load");
+    await expect(dialog.getByRole("checkbox", { name: /I searched existing issues/ })).toBeChecked();
+    await dialog.getByRole("button", { name: "Create issue", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    const input = await page.evaluate(() => {
+      const call = (window as unknown as { __ipcLog: Array<{ cmd: string; args: { input?: unknown } }> }).__ipcLog.find((entry) => entry.cmd === "create_issue");
+      return call?.args.input;
+    });
+    expect(input).toMatchObject({ title: "Persistent form issue", labels: ["bug", "enhancement"], assignees: ["maintainer", "octocat"] });
+    expect((input as { body: string }).body).toContain("### Summary\n\nThe page will not load");
+    expect((input as { body: string }).body).toContain("- [X] I searched existing issues");
   });
 });

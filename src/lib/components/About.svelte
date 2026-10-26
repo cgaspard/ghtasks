@@ -2,16 +2,19 @@
   import { onMount } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { api } from "../api";
-  import { appVersion, lastError, updateAvailable } from "../stores";
+  import { appVersion, updateAvailable } from "../stores";
 
   interface Props {
     onBack: () => void;
+    embedded?: boolean;
   }
-  let { onBack }: Props = $props();
+  let { onBack, embedded = false }: Props = $props();
 
   const REPO_URL = "https://github.com/cgaspard/ghtasks";
 
   let checkingUpdate = $state(false);
+  let installing = $state(false);
+  let installError = $state("");
   let updateStatus = $state<
     | { kind: "idle" }
     | { kind: "current" }
@@ -50,14 +53,19 @@
   }
 
   async function installUpdate() {
+    if (installing) return;
+    installing = true;
+    installError = "";
     try {
       await api.installUpdate();
     } catch (e) {
-      $lastError = String(e);
+      installError = String(e);
+      installing = false;
     }
   }
 
   function onKey(e: KeyboardEvent) {
+    if (embedded || e.defaultPrevented) return;
     if (e.key !== "Escape") return;
     const target = e.target as HTMLElement | null;
     const tag = target?.tagName;
@@ -75,7 +83,8 @@
 
 <svelte:window on:keydown={onKey} />
 
-<div class="wrap">
+<div class="wrap" class:embedded>
+  {#if !embedded}
   <header class="bar">
     <button class="ghost back" onclick={onBack} aria-label="Back">
       <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
@@ -89,6 +98,7 @@
     <div class="crumb">About</div>
     <div class="pad" aria-hidden="true"></div>
   </header>
+  {/if}
 
   <div class="scroll">
     <section class="hero">
@@ -129,8 +139,8 @@
           </details>
         {/if}
         <div class="actions">
-          <button class="primary small" onclick={installUpdate}>
-            Download &amp; install
+          <button class="primary small" onclick={installUpdate} disabled={installing}>
+            {installing ? "Installing…" : "Download & install"}
           </button>
           <button
             class="ghost small"
@@ -154,6 +164,7 @@
           {checkingUpdate ? "Checking…" : "Check again"}
         </button>
       </div>
+      {#if installError}<p class="install-error" role="alert">Couldn’t install the update: {installError}</p>{/if}
     </section>
 
     <section class="card">
@@ -190,7 +201,7 @@
         lives in the OS keychain (<code>com.cgaspard.ghtasks</code>) and
         never leaves your machine except to reach
         <code>api.github.com</code>. Projects v2 boards sync via GraphQL;
-        repo issues via REST search. Auto-poll runs every 90 seconds.
+        repo issues via REST search. Choose your automatic refresh interval in General.
       </p>
     </section>
 
@@ -208,6 +219,9 @@
     min-height: 0;
     background: var(--bg);
   }
+  .wrap.embedded { height: auto; }
+  .embedded .scroll { overflow: visible; padding: 16px 0 0; }
+  .install-error { color: #ffb4b7; font-size: 12px; overflow-wrap: anywhere; }
   .bar {
     display: flex;
     align-items: center;

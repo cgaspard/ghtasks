@@ -609,7 +609,8 @@ where
         }
 
         // Collect in-order so we can persist the cursor chain correctly.
-        let mut outcomes: Vec<Option<(Vec<ProjectItem>, bool, Option<String>)>> =
+        type PageOutcome = (Vec<ProjectItem>, bool, Option<String>);
+        let mut outcomes: Vec<Option<PageOutcome>> =
             vec![None; prior_cursors.len()];
         for h in futs {
             match h.await {
@@ -681,11 +682,7 @@ where
     // --- Serial tail (first sync OR stale cursor set) -------------------
     // Starting from `last_serial_cursor`, keep pulling until hasNextPage is
     // false. Emits one event per page with is_final on the last.
-    loop {
-        let after = match last_serial_cursor.clone() {
-            Some(c) => c,
-            None => break,
-        };
+    while let Some(after) = last_serial_cursor.clone() {
         let raw = match graphql::<Value>(
             client,
             token,
@@ -775,7 +772,7 @@ fn parse_items_page(
         .unwrap_or_default();
     let items: Vec<ProjectItem> = nodes
         .iter()
-        .filter_map(|n| parse_project_item(n))
+        .filter_map(parse_project_item)
         .collect();
     let page_info = items_node.get("pageInfo");
     let has_next = page_info
@@ -940,7 +937,7 @@ fn parse_project_item(n: &Value) -> Option<ProjectItem> {
                     None,
                     fv.get("number")
                         .and_then(|v| v.as_f64())
-                        .map(|n| format_number(n)),
+                        .map(format_number),
                 ),
                 "ProjectV2ItemFieldDateValue" => (
                     None,

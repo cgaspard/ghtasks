@@ -33,7 +33,7 @@ test.describe("Projects tab — interactions", () => {
 
     // Open the Status filter popover and select only "Done".
     await page.getByRole("button", { name: /^Status:/ }).click();
-    const menu = page.getByRole("menu");
+    const menu = page.getByRole("dialog", { name: "Status filters" });
     await menu.getByText("Done", { exact: true }).click();
     // Close popover by clicking the trigger again (or elsewhere).
     await page.keyboard.press("Escape");
@@ -56,7 +56,7 @@ test.describe("Projects tab — interactions", () => {
 
     // Now a Priority FilterPicker appears; select P0.
     await page.getByRole("button", { name: /^Priority:/ }).click();
-    await page.getByRole("menu").getByText("P0", { exact: true }).click();
+    await page.getByRole("dialog", { name: "Priority filters" }).getByText("P0", { exact: true }).click();
     await page.keyboard.press("Escape");
 
     // Only #92 (P0) remains.

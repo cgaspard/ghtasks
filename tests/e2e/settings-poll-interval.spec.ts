@@ -16,7 +16,10 @@ test.describe("Settings — poll interval clamp", () => {
     await mountApp();
     await page.getByRole("button", { name: "octocat" }).click();
     await page.getByRole("menuitem", { name: "Settings" }).click();
-    await expect(page.getByText("Poll interval (seconds)")).toBeVisible();
+    await page.getByRole("button", { name: /General Startup/ }).click();
+    await page.getByRole("button", { name: "Refresh automatically", exact: true }).click();
+    await page.getByRole("option", { name: "Custom interval…", exact: true }).click();
+    await expect(page.getByRole("spinbutton")).toBeVisible();
   });
 
   test("a valid value is saved as-is", async ({ page }) => {

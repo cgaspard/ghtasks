@@ -84,7 +84,7 @@ impl Source {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Settings {
     #[serde(default)]
     pub default_repo: Option<String>,
@@ -106,6 +106,20 @@ pub struct Settings {
     /// of stable. Off by default — beta builds ship early, possibly-rough fixes.
     #[serde(default)]
     pub beta_updates: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            default_repo: None,
+            poll_interval_secs: default_poll_secs(),
+            launch_at_login: false,
+            window_size: default_window_size(),
+            row_density: default_row_density(),
+            notifications_sync: false,
+            beta_updates: false,
+        }
+    }
 }
 
 fn default_poll_secs() -> u64 {
@@ -228,7 +242,11 @@ pub fn load_settings(app: &AppHandle) -> Result<Settings> {
     if value.is_null() {
         Ok(Settings::default())
     } else {
-        Ok(serde_json::from_value(value)?)
+        let mut settings: Settings = serde_json::from_value(value)?;
+        if !(30..=3600).contains(&settings.poll_interval_secs) {
+            settings.poll_interval_secs = default_poll_secs();
+        }
+        Ok(settings)
     }
 }
 
@@ -314,3 +332,20 @@ pub fn save_cursors(app: &AppHandle, source_id: &str, cursors: &[String]) -> Res
     Ok(())
 }
 
+#[cfg(test)]
+mod settings_defaults_tests {
+    use super::Settings;
+
+    #[test]
+    fn fresh_install_and_empty_saved_preferences_have_identical_valid_defaults() {
+        let fresh = Settings::default();
+        let saved: Settings = serde_json::from_value(serde_json::json!({})).unwrap();
+        assert_eq!(
+            serde_json::to_value(&fresh).unwrap(),
+            serde_json::to_value(saved).unwrap()
+        );
+        assert_eq!(fresh.poll_interval_secs, 90);
+        assert_eq!(fresh.window_size, "large");
+        assert_eq!(fresh.row_density, "default");
+    }
+}

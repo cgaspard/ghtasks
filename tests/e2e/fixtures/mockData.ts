@@ -205,6 +205,7 @@ export const PROJECT_ITEMS: ProjectItem[] = [
 ];
 
 export const PROJECT_PAGE_EVENT: ProjectPageEvent = {
+  generation: 0,
   source_id: PROJECT_SOURCE.id,
   project: PROJECT_SUMMARY,
   fields: [STATUS_FIELD, PRIORITY_FIELD],

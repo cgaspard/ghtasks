@@ -29,7 +29,8 @@ src/                      Svelte frontend
       InboxList.svelte     Inbox tab (github.com/notifications mirror)
       InboxBadge.svelte    Amber needs-response cue (inline on Projects/Issues)
       LinkedBadges.svelte Flat colored linked-PR indicator
-      Settings.svelte     Settings accordion (Sources / General / About)
+      Settings.svelte     Focused settings home + category pages
+      SyncFooter.svelte   Bottom sync status + manual refresh
       SourceEditor.svelte Add / edit / delete a Project or Repo source
       NewIssue.svelte     Create-issue modal with optional project attach
       Select.svelte       Themed, keyboard-navigable custom dropdown
@@ -93,7 +94,7 @@ npm run tauri dev
 # Or use the VS Code launcher "Tauri Dev"
 ```
 
-`GHTASKS_CLIENT_ID` must be set at build time. A `.env` file at the repo root with `GHTASKS_CLIENT_ID=Ov23lihPJQFjJ3eZd0Zc` works for local dev.
+`GHTASKS_CLIENT_ID` must be set at build time. A `.env` file at the repo root with `GHTASKS_CLIENT_ID=<your-oauth-client-id>` works for local dev.
 
 ## Testing
 
@@ -137,7 +138,7 @@ in sync with the IPC contract.
 3. Reconciliation is additive: items are upserted by `item_id`. On the **final** page of a generation, items not seen this generation are dropped (archived/removed upstream), except those in the `recentlyCreated` buffer (2-min TTL) — GitHub Search and Projects indexing lags ~60s behind creates, so we keep recently-created issues visible until the server catches up.
 4. Results are persisted to `localStorage` via `persistent()` so the next cold launch paints instantly from cache while a fresh sync runs underneath.
 
-Auto-poll every 90s. Manual refresh via the ↻ button in TopBar.
+Auto-poll uses the saved refresh interval (90s by default). Manual refresh is in the bottom sync footer.
 
 ## Performance notes (earned, not guessed)
 
