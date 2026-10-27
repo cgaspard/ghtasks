@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { tick, untrack } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { api, type IssueDetail as IssueDetailT } from "../api";
   import { lastError } from "../stores";
+  import { closeIssue } from "../issueActions";
   import { renderMarkdown, isSafeExternalUrl } from "../markdown";
 
   interface Props {
@@ -17,29 +18,66 @@
   let loading = $state(true);
   let error: string | null = $state(null);
   let refreshing = $state(false);
+  let confirmingClose = $state(false);
+  let closing = $state(false);
+  let closeError: string | null = $state(null);
+  let closedNotice = $state(false);
+  let closeButton: HTMLButtonElement | undefined = $state();
+  let cancelCloseButton: HTMLButtonElement | undefined = $state();
+  let backButton: HTMLButtonElement | undefined = $state();
+  let routeGeneration = 0;
+  let loadGeneration = 0;
 
-  async function load(showSpinner: boolean) {
+  async function load(showSpinner: boolean, targetRepo = repo, targetNumber = number) {
+    if (closing || confirmingClose) return;
+    const route = routeGeneration;
+    const generation = ++loadGeneration;
     if (showSpinner) loading = true;
     else refreshing = true;
     error = null;
     try {
-      detail = await api.getIssueDetail(repo, number);
+      const next = await api.getIssueDetail(targetRepo, targetNumber);
+      if (generation !== loadGeneration || route !== routeGeneration) return;
+      detail = next;
     } catch (e) {
-      error = String(e);
+      if (generation === loadGeneration && route === routeGeneration) error = String(e);
     } finally {
-      loading = false;
-      refreshing = false;
+      if (generation === loadGeneration && route === routeGeneration) {
+        loading = false;
+        refreshing = false;
+      }
     }
   }
 
-  onMount(() => {
-    void load(true);
+  $effect(() => {
+    const targetRepo = repo;
+    const targetNumber = number;
+    untrack(() => {
+      routeGeneration++;
+      detail = null;
+      error = null;
+      refreshing = false;
+      confirmingClose = false;
+      closing = false;
+      closeError = null;
+      closedNotice = false;
+      commentText = "";
+      submittingComment = false;
+      void load(true, targetRepo, targetNumber);
+    });
+    return () => { routeGeneration++; loadGeneration++; };
   });
 
   function onKey(e: KeyboardEvent) {
+    if (e.defaultPrevented || e.key !== "Escape") return;
+    if (confirmingClose || closing) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!closing) void cancelClose();
+      return;
+    }
     // Escape backs out unless the user is in an input (they'd expect it
     // to clear the input instead).
-    if (e.key !== "Escape") return;
     const target = e.target as HTMLElement | null;
     const tag = target?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA") return;
@@ -83,16 +121,62 @@
 
   async function submitComment() {
     const body = commentText.trim();
-    if (!body || submittingComment || !detail) return;
+    if (!body || submittingComment || !detail || closing || confirmingClose || refreshing) return;
+    const targetRepo = repo;
+    const targetNumber = number;
+    const route = routeGeneration;
     submittingComment = true;
     try {
-      await api.addIssueComment(repo, number, body);
+      await api.addIssueComment(targetRepo, targetNumber, body);
+      if (route !== routeGeneration) return;
       commentText = "";
       await load(false); // silently re-fetch so new comment appears
     } catch (e) {
-      $lastError = String(e);
+      if (route === routeGeneration) $lastError = String(e);
     } finally {
-      submittingComment = false;
+      if (route === routeGeneration) submittingComment = false;
+    }
+  }
+
+  const canClose = $derived(detail?.issue.state === "open" && !detail.issue.pull_request && !/\/pull\/\d+(?:[/?#]|$)/.test(detail.issue.html_url));
+
+  async function askClose() {
+    if (!canClose || closing || refreshing || submittingComment || loading) return;
+    closeError = null;
+    confirmingClose = true;
+    await tick();
+    cancelCloseButton?.focus();
+  }
+
+  async function cancelClose() {
+    if (closing) return;
+    confirmingClose = false;
+    closeError = null;
+    await tick();
+    closeButton?.focus();
+  }
+
+  async function confirmClose() {
+    if (!detail || !canClose || !confirmingClose || closing || refreshing || submittingComment) return;
+    const issue = detail.issue;
+    const targetRepo = repo;
+    const route = routeGeneration;
+    closing = true;
+    closeError = null;
+    try {
+      const closed = await closeIssue(targetRepo, issue);
+      if (route !== routeGeneration || !detail) return;
+      loadGeneration++;
+      detail = { ...detail, issue: closed };
+      confirmingClose = false;
+      closedNotice = true;
+      closing = false;
+      await tick();
+      backButton?.focus();
+    } catch (e) {
+      if (route === routeGeneration) closeError = `Couldn’t close the issue. Try again. ${String(e)}`;
+    } finally {
+      if (route === routeGeneration) closing = false;
     }
   }
 
@@ -106,7 +190,7 @@
 
 <div class="wrap">
   <header class="bar">
-    <button class="ghost back" onclick={onBack} aria-label="Back">
+    <button class="ghost back" onclick={onBack} aria-label="Back" disabled={closing} bind:this={backButton}>
       <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
         <path
           fill="currentColor"
@@ -124,7 +208,7 @@
       class="ghost refresh"
       onclick={() => load(false)}
       aria-label="Refresh"
-      disabled={loading || refreshing}
+      disabled={loading || refreshing || closing || confirmingClose || submittingComment}
       class:spinning={refreshing}
       title="Refresh"
     >
@@ -255,27 +339,43 @@
       <section class="composer">
         <textarea
           bind:value={commentText}
+          disabled={closing}
           placeholder="Write a comment…"
           rows="3"
         ></textarea>
         <div class="composer-actions">
           <button
-            class="ghost small"
-            onclick={() => openUrl(issue.html_url)}
-            title="Open on GitHub"
-          >
-            Open on GitHub ↗
-          </button>
-          <button
             class="primary small"
             onclick={submitComment}
-            disabled={!commentText.trim() || submittingComment}
+            disabled={!commentText.trim() || submittingComment || refreshing || closing || confirmingClose}
           >
             {submittingComment ? "Commenting…" : "Comment"}
           </button>
         </div>
       </section>
     </div>
+    <footer class="issue-actions">
+      {#if confirmingClose}
+        <section class="close-confirm" role="group" aria-label="Confirm closing issue">
+          <strong>Close this issue on GitHub?</strong>
+          <p class="muted">This closes {repo} #{number}. Its project status stays the same.</p>
+          {#if closeError}<p class="close-error" role="alert">{closeError}</p>{/if}
+          <div class="action-row">
+            <button class="ghost small" onclick={cancelClose} disabled={closing} bind:this={cancelCloseButton}>Cancel</button>
+            <button class="primary small" onclick={confirmClose} disabled={closing}>{closing ? "Closing…" : "Close issue"}</button>
+          </div>
+        </section>
+      {:else}
+        <div class="action-row">
+          <button class="ghost small" onclick={() => openUrl(issue.html_url)}>Open on GitHub ↗</button>
+          {#if canClose}
+            <button class="primary small" onclick={askClose} disabled={loading || refreshing || submittingComment} bind:this={closeButton}>Close issue</button>
+          {:else if closedNotice}
+            <span class="close-success" role="status">Issue closed on GitHub.</span>
+          {/if}
+        </div>
+      {/if}
+    </footer>
   {/if}
 </div>
 
@@ -512,8 +612,15 @@
   .composer-actions {
     display: flex;
     gap: 6px;
-    justify-content: space-between;
+    justify-content: flex-end;
   }
+  .issue-actions { flex-shrink: 0; padding: 10px 14px; border-top: 1px solid var(--border); background: var(--bg-elev); }
+  .action-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .close-confirm { font-size: 12px; }
+  .close-confirm p { margin: 6px 0 10px; overflow-wrap: anywhere; }
+  .close-confirm .action-row { justify-content: flex-end; }
+  .close-error { color: #ffb4b7; }
+  .close-success { color: var(--ok); font-size: 12px; }
   .small {
     font-size: 11px;
     padding: 4px 8px;

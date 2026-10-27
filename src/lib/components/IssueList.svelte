@@ -2,6 +2,7 @@
   import { tick } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { api, repoFullName, type Issue } from "../api";
+  import { closeIssue } from "../issueActions";
   import LinkedBadges from "./LinkedBadges.svelte";
   import InboxBadge from "./InboxBadge.svelte";
   import CardViewToggle from "./CardViewToggle.svelte";
@@ -23,9 +24,6 @@
     seenInboxCues,
     inboxByKey,
     cardViews,
-    recentlyCreated,
-    recentlyClosed,
-    projectResults,
   } from "../stores";
 
   let filter = $state("");
@@ -162,20 +160,7 @@
     closing = true;
     closeError = null;
     try {
-      const closedIssue = await api.toggleIssueState(repo, issue.number, true);
-      recentlyClosed.update((entries) => new Map(entries).set(issue.node_id, Date.now()));
-      recentlyCreated.update((entries) => {
-        const next = new Map(entries);
-        const entry = next.get(issue.node_id);
-        if (entry) next.set(issue.node_id, { ...entry, issue: { ...entry.issue, state: closedIssue.state, updated_at: closedIssue.updated_at }, item: entry.item ? { ...entry.item, issue: { ...entry.item.issue, state: closedIssue.state, updated_at: closedIssue.updated_at } } : undefined });
-        return next;
-      });
-      $projectResults = $projectResults.map((result) => result.snapshot ? { ...result, snapshot: { ...result.snapshot, items: result.snapshot.items.map((item) => item.issue.node_id === issue.node_id ? { ...item, issue: { ...item.issue, state: closedIssue.state, updated_at: closedIssue.updated_at } } : item) } } : result);
-      // Optimistic remove from the local list.
-      $sourceResults = $sourceResults.map((r) => ({
-        ...r,
-        issues: r.issues.filter((i) => i.node_id !== issue.node_id),
-      }));
+      await closeIssue(repo, issue);
       confirmingId = null;
       await tick();
       list?.querySelector<HTMLInputElement>("[data-close-node]")?.focus();

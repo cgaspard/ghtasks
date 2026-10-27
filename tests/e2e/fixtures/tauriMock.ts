@@ -232,8 +232,26 @@ function installTauriMock(): void {
           issue: (s.createdIssue as Record<string, unknown>) || args.input,
           item_id: "ITEM_NEW",
         };
-      case "toggle_issue_state":
-        return s.toggledIssue || { number: args.number, state: "closed" };
+      case "toggle_issue_state": {
+        const detail = s.issueDetail as { issue?: Record<string, unknown> } | undefined;
+        const sourceIssues = ((s.sourceResults as Array<{ issues?: Record<string, unknown>[] }>) || []).flatMap((source) => source.issues || []);
+        const projectIssues = ((s.projectPages as Array<{ items?: Array<{ issue: Record<string, unknown> }> }>) || []).flatMap((page) => (page.items || []).map((item) => item.issue));
+        const matches = (issue: Record<string, unknown> | undefined) => issue?.number === args.number && (
+          issue.repository_url === `https://api.github.com/repos/${args.repo}` ||
+          String(issue.html_url || "").startsWith(`https://github.com/${args.repo}/issues/`)
+        );
+        const existing = [detail?.issue, ...sourceIssues, ...projectIssues].find(matches);
+        const result = (s.toggledIssue as Record<string, unknown> | undefined) || {
+          ...existing,
+          number: args.number,
+          state: args.closed ? "closed" : "open",
+          updated_at: new Date().toISOString(),
+        };
+        if (matches(detail?.issue)) s.issueDetail = { ...detail, issue: { ...detail!.issue, state: result.state, updated_at: result.updated_at } };
+        // Search and streamed snapshots intentionally remain stale, matching
+        // GitHub's indexing delay after a successful close.
+        return result;
+      }
       case "set_project_item_status":
         return null;
       case "add_issue_comment":
